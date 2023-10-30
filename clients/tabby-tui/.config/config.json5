@@ -1,0 +1,15 @@
+{
+  "keybindings": {
+    "Home": {
+      "<q>": "Quit", // Quit the application
+      "<h>": "ScheduleHealthCheck",
+      "<j>": "ScheduleHealthCheck",
+      "<k>": "ScheduleDecrement",
+      "<l>": "ToggleShowHelp",
+      "</>": "EnterInsert",
+      "<Ctrl-d>": "Quit", // Another way to quit
+      "<Ctrl-c>": "Quit", // Yet another way to quit
+      "<Ctrl-z>": "Suspend" // Suspend the application
+    },
+  }
+}

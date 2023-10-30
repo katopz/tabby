@@ -11,6 +11,9 @@ members = [
     "crates/llama-cpp-bindings",
     "crates/http-api-bindings",
 ]
+exclude = [
+    "clients/tabby-tui"
+]
 
 [workspace.package]
 version = "0.5.0-dev"

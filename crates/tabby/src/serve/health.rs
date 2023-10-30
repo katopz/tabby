@@ -7,17 +7,17 @@ use serde::{Deserialize, Serialize};
 use sysinfo::{CpuExt, System, SystemExt};
 use utoipa::ToSchema;
 
-#[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct HealthState {
-    model: String,
+    pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    chat_model: Option<String>,
-    device: String,
-    arch: String,
-    cpu_info: String,
-    cpu_count: usize,
-    cuda_devices: Vec<String>,
-    version: Version,
+    pub chat_model: Option<String>,
+    pub device: String,
+    pub arch: String,
+    pub cpu_info: String,
+    pub cpu_count: usize,
+    pub cuda_devices: Vec<String>,
+    pub version: Version,
 }
 
 impl HealthState {
@@ -72,12 +72,12 @@ fn read_cuda_devices() -> Result<Vec<String>> {
     Ok(cuda_devices)
 }
 
-#[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Version {
-    build_date: String,
-    build_timestamp: String,
-    git_sha: String,
-    git_describe: String,
+    pub build_date: String,
+    pub build_timestamp: String,
+    pub git_sha: String,
+    pub git_describe: String,
 }
 
 impl Version {

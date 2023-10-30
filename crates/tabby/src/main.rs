@@ -8,6 +8,7 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
+use tabby::fatal;
 use tabby_common::config::Config;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
@@ -58,23 +59,6 @@ async fn main() {
     }
 
     opentelemetry::global::shutdown_tracer_provider();
-}
-
-#[macro_export]
-macro_rules! fatal {
-    ($msg:expr) => {
-        ({
-            tracing::error!($msg);
-            std::process::exit(1);
-        })
-    };
-
-    ($fmt:expr, $($arg:tt)*) => {
-        ({
-            tracing::error!($fmt, $($arg)*);
-            std::process::exit(1);
-        })
-    };
 }
 
 fn init_logging(otlp_endpoint: Option<String>) {

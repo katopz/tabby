@@ -23,9 +23,9 @@ use tracing::{info, warn};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use self::{
+pub use self::{
     engine::{create_engine, EngineInfo},
-    health::HealthState,
+    health::*,
     search::IndexServer,
 };
 use crate::fatal;
