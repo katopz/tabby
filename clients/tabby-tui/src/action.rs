@@ -5,7 +5,7 @@ use serde::{
   Deserialize, Serialize,
 };
 
-use crate::core::health::TabbyClientViewData;
+use crate::core::health::{TabbyClientViewData, TabbyChatViewData};
 
 //// ANCHOR: action_enum
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -21,6 +21,7 @@ pub enum Action {
   Help,
   ToggleShowHelp,
   CompleteInput(String),
+  CompleteInfer(String),
   EnterNormal,
   EnterInsert,
   EnterProcessing,
@@ -28,6 +29,7 @@ pub enum Action {
   Update,
   ScheduleHealthCheck,
   UpdateHealthCheckView(TabbyClientViewData),
+  UpdateChatView(TabbyChatViewData),
   Up,
   Down,
 }

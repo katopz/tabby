@@ -32,3 +32,16 @@ pub async fn fetch_health_view_data() -> TabbyClientViewData {
     Err(_) => TabbyClientViewData { health_state: None },
   }
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+pub struct TabbyChatViewData {
+  pub text: Option<String>,
+}
+
+pub async fn fetch_chat_view_data() -> TabbyChatViewData {
+  TabbyChatViewData { text: Some("hi!".to_string()) }
+  // match fetch_tabby::<HealthState>(API_URL).await {
+  //   Ok(text) => TabbyChatViewData { text: Some(text) },
+  //   Err(_) => TabbyChatViewData { text: None },
+  // }
+}

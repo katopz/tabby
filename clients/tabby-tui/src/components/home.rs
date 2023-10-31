@@ -12,7 +12,7 @@ use super::{Component, Frame};
 use crate::{
   action::Action,
   config::key_event_to_string,
-  core::health::{fetch_health_view_data, TabbyClientViewData},
+  core::health::{fetch_chat_view_data, fetch_health_view_data, TabbyChatViewData, TabbyClientViewData},
 };
 
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
@@ -96,6 +96,23 @@ impl Home {
       None => todo!(),
     }
   }
+
+  pub fn schedule_infer(&mut self, prompt: &str) {
+    let tx = self.action_tx.clone().unwrap();
+    tokio::spawn(async move {
+      let chat_view_data = fetch_chat_view_data().await;
+      tx.send(Action::UpdateChatView(chat_view_data)).unwrap();
+    });
+  }
+
+  pub fn update_chat_view(&mut self, chat_view_data: TabbyChatViewData) {
+    let text = match chat_view_data.text {
+      Some(text) => format!("tabby: {text}"),
+      None => format!("tabby: An error occurred."),
+    };
+
+    self.add(text);
+  }
 }
 
 impl Component for Home {
@@ -137,7 +154,11 @@ impl Component for Home {
       Action::Tick => self.tick(),
       Action::Render => self.render_tick(),
       Action::ToggleShowHelp => self.show_help = !self.show_help,
-      Action::CompleteInput(s) => self.add(s),
+      Action::CompleteInput(s) => {
+        self.add(format!("me: {s}"));
+        self.schedule_infer(&s);
+      },
+      Action::CompleteInfer(s) => self.add(format!("tabby: {s}")),
       Action::EnterNormal => {
         self.mode = Mode::Normal;
       },
@@ -159,15 +180,16 @@ impl Component for Home {
       },
       Action::Up => {
         self.vertical_scroll_state.scroll(ScrollDirection::Backward);
-        // self.vertical_scroll = self.vertical_scroll_state.position;
         self.vertical_scroll = self.vertical_scroll.saturating_sub(1);
       },
       Action::Down => {
         self.vertical_scroll_state.scroll(ScrollDirection::Forward);
-        // self.vertical_scroll = self.vertical_scroll_state.position;
         if self.vertical_scroll < self.vertical_scroll_max - 1 {
           self.vertical_scroll = self.vertical_scroll.saturating_add(1);
         }
+      },
+      Action::UpdateChatView(chat_view_data) => {
+        self.update_chat_view(chat_view_data);
       },
       _ => (),
     }
@@ -179,7 +201,6 @@ impl Component for Home {
 
     // Text area --------------------------------------------
 
-    // let mut text: Vec<Line> = self.text.clone().iter().map(|l| Line::from(l.clone())).collect();
     let line = self.text.clone().iter().map(|e| Line::from(e.clone())).collect::<Vec<_>>();
 
     let size = f.size();
