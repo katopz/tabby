@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use color_eyre::eyre::Result;
+use color_eyre::{eyre::Result, owo_colors::OwoColorize};
 use crossterm::event::{KeyCode, KeyEvent};
 use log::error;
 use ratatui::{prelude::*, widgets::*};
@@ -9,7 +9,11 @@ use tracing::trace;
 use tui_input::{backend::crossterm::EventHandler, Input};
 
 use super::{Component, Frame};
-use crate::{action::Action, config::key_event_to_string, core::health::{fetch_health_view_data, TabbyClientViewData}};
+use crate::{
+  action::Action,
+  config::key_event_to_string,
+  core::health::{fetch_health_view_data, TabbyClientViewData},
+};
 
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
 pub enum Mode {
@@ -32,6 +36,10 @@ pub struct Home {
   pub keymap: HashMap<KeyEvent, Action>,
   pub text: Vec<String>,
   pub last_events: Vec<KeyEvent>,
+
+  pub vertical_scroll_state: ScrollbarState,
+  pub vertical_scroll: usize,
+  pub vertical_scroll_max: usize,
 }
 
 impl Home {
@@ -59,58 +67,34 @@ impl Home {
     self.text.push(s)
   }
 
-  pub fn schedule_increment(&mut self, i: usize) {
-    let tx = self.action_tx.clone().unwrap();
-    tokio::spawn(async move {
-      tx.send(Action::EnterProcessing).unwrap();
-      tokio::time::sleep(Duration::from_secs(1)).await;
-      tx.send(Action::Increment(i)).unwrap();
-      tx.send(Action::ExitProcessing).unwrap();
-    });
-  }
-
-  pub fn schedule_decrement(&mut self, i: usize) {
-    let tx = self.action_tx.clone().unwrap();
-    tokio::spawn(async move {
-      tx.send(Action::EnterProcessing).unwrap();
-      tokio::time::sleep(Duration::from_secs(1)).await;
-      tx.send(Action::Decrement(i)).unwrap();
-      tx.send(Action::ExitProcessing).unwrap();
-    });
-  }
-
-  pub fn increment(&mut self, i: usize) {
-    self.counter = self.counter.saturating_add(i);
-  }
-
   pub fn decrement(&mut self, i: usize) {
     self.counter = self.counter.saturating_sub(i);
   }
 
   pub fn schedule_health_check(&mut self) {
-    self.counter = self.counter.saturating_add(10);
-
     let tx = self.action_tx.clone().unwrap();
     tokio::spawn(async move {
       let health_view_data = fetch_health_view_data().await;
       tx.send(Action::UpdateHealthCheckView(health_view_data)).unwrap();
     });
-
-    // let health_view_data = rx.recv().unwrap();
-
-    // match health_view_data.health_state {
-    //   Some(health_state) => {
-    //     self.main_title = format!("Tabby {}", health_state.version.git_describe);
-    //   },
-    //   None => todo!(),
-    // }
   }
+
   pub fn update_health_check_view(&mut self, health_view_data: TabbyClientViewData) {
-    self.main_title = "Tabby v0.3.0".to_string();
-  }
+    match health_view_data.health_state {
+      Some(health_state) => {
+        let mut main_title =
+          format!("Tabby {} | {} | {}", health_state.version.git_describe, health_state.model, health_state.device);
 
-  pub fn set_main_title(&mut self, i: usize) {
-    self.main_title = "Tabby v0.3.0".to_string();
+        if health_state.cuda_devices.len() > 0 {
+          main_title += " (";
+          main_title += &health_state.cuda_devices.join(", ");
+          main_title += ") ";
+        }
+
+        self.main_title = main_title;
+      },
+      None => todo!(),
+    }
   }
 }
 
@@ -143,15 +127,16 @@ impl Component for Home {
     Ok(Some(action))
   }
 
+  fn init(&mut self) -> Result<()> {
+    self.schedule_health_check();
+    Ok(())
+  }
+
   fn update(&mut self, action: Action) -> Result<Option<Action>> {
     match action {
       Action::Tick => self.tick(),
       Action::Render => self.render_tick(),
       Action::ToggleShowHelp => self.show_help = !self.show_help,
-      Action::ScheduleIncrement => self.schedule_increment(1),
-      Action::ScheduleDecrement => self.schedule_decrement(1),
-      Action::Increment(i) => self.increment(i),
-      Action::Decrement(i) => self.decrement(i),
       Action::CompleteInput(s) => self.add(s),
       Action::EnterNormal => {
         self.mode = Mode::Normal;
@@ -172,6 +157,18 @@ impl Component for Home {
       Action::UpdateHealthCheckView(health_check_data) => {
         self.update_health_check_view(health_check_data);
       },
+      Action::Up => {
+        self.vertical_scroll_state.scroll(ScrollDirection::Backward);
+        // self.vertical_scroll = self.vertical_scroll_state.position;
+        self.vertical_scroll = self.vertical_scroll.saturating_sub(1);
+      },
+      Action::Down => {
+        self.vertical_scroll_state.scroll(ScrollDirection::Forward);
+        // self.vertical_scroll = self.vertical_scroll_state.position;
+        if self.vertical_scroll < self.vertical_scroll_max - 1 {
+          self.vertical_scroll = self.vertical_scroll.saturating_add(1);
+        }
+      },
       _ => (),
     }
     Ok(None)
@@ -180,29 +177,17 @@ impl Component for Home {
   fn draw(&mut self, f: &mut Frame<'_>, rect: Rect) -> Result<()> {
     let rects = Layout::default().constraints([Constraint::Percentage(100), Constraint::Min(3)].as_ref()).split(rect);
 
-    let mut text: Vec<Line> = self.text.clone().iter().map(|l| Line::from(l.clone())).collect();
-    text.insert(0, "".into());
-    text.insert(0, "Type into input and hit enter to display here".dim().into());
-    text.insert(0, "".into());
-    text.insert(0, format!("Render Ticker: {}", self.render_ticker).into());
-    text.insert(0, format!("App Ticker: {}", self.app_ticker).into());
-    text.insert(0, format!("Counter: {}", self.counter).into());
-    text.insert(0, "".into());
-    text.insert(
-      0,
-      Line::from(vec![
-        "Press ".into(),
-        Span::styled("j", Style::default().fg(Color::Red)),
-        " or ".into(),
-        Span::styled("k", Style::default().fg(Color::Red)),
-        " to ".into(),
-        Span::styled("increment", Style::default().fg(Color::Yellow)),
-        " or ".into(),
-        Span::styled("decrement", Style::default().fg(Color::Yellow)),
-        ".".into(),
-      ]),
-    );
-    text.insert(0, "".into());
+    // Text area --------------------------------------------
+
+    // let mut text: Vec<Line> = self.text.clone().iter().map(|l| Line::from(l.clone())).collect();
+    let line = self.text.clone().iter().map(|e| Line::from(e.clone())).collect::<Vec<_>>();
+
+    let size = f.size();
+
+    self.vertical_scroll_max = line.len();
+    self.vertical_scroll_state = self.vertical_scroll_state.content_length(self.vertical_scroll_max as u16);
+
+    // Chat input --------------------------------------------
 
     let width = rects[1].width.max(3) - 3; // keep 2 for borders and 1 for cursor
     let scroll = self.input.visual_scroll(width as usize);
@@ -221,6 +206,7 @@ impl Component for Home {
         Span::styled(" to finish)", Style::default().fg(Color::DarkGray)),
       ])));
     f.render_widget(input, rects[1]);
+
     if self.mode == Mode::Insert {
       f.set_cursor((rects[1].x + 1 + self.input.cursor() as u16).min(rects[1].x + rects[1].width - 2), rects[1].y + 1)
     }
@@ -234,8 +220,6 @@ impl Component for Home {
         .border_style(Style::default().fg(Color::Yellow));
       f.render_widget(block, rect);
       let rows = vec![
-        Row::new(vec!["j", "Increment"]),
-        Row::new(vec!["k", "Decrement"]),
         Row::new(vec!["/", "Enter Input"]),
         Row::new(vec!["ESC", "Exit Input"]),
         Row::new(vec!["Enter", "Submit Input"]),
@@ -262,22 +246,27 @@ impl Component for Home {
       Rect { x: rect.x + 1, y: rect.height.saturating_sub(1), width: rect.width.saturating_sub(2), height: 1 },
     );
 
-    f.render_widget(
-      Paragraph::new(text)
-        .block(
-          Block::default()
-            .title(self.main_title.as_str())
-            .title_alignment(Alignment::Center)
-            .borders(Borders::ALL)
-            .border_style(match self.mode {
-              Mode::Processing => Style::default().fg(Color::Yellow),
-              _ => Style::default(),
-            })
-            .border_type(BorderType::Rounded),
-        )
-        .style(Style::default().fg(Color::Cyan))
-        .alignment(Alignment::Center),
+    let paragraph = Paragraph::new(line.clone())
+      .gray()
+      .block(
+        Block::default()
+          .title(self.main_title.as_str())
+          .borders(Borders::ALL)
+          .border_style(match self.mode {
+            Mode::Processing => Style::default().fg(Color::Yellow),
+            _ => Style::default(),
+          })
+          .border_type(BorderType::Rounded),
+      )
+      .scroll((self.vertical_scroll as u16, 0));
+    f.render_widget(paragraph, rects[0]);
+    f.render_stateful_widget(
+      Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓")),
       rects[0],
+      &mut self.vertical_scroll_state,
     );
 
     Ok(())

@@ -20,10 +20,6 @@ pub enum Action {
   Error(String),
   Help,
   ToggleShowHelp,
-  ScheduleIncrement,
-  ScheduleDecrement,
-  Increment(usize),
-  Decrement(usize),
   CompleteInput(String),
   EnterNormal,
   EnterInsert,
@@ -32,6 +28,8 @@ pub enum Action {
   Update,
   ScheduleHealthCheck,
   UpdateHealthCheckView(TabbyClientViewData),
+  Up,
+  Down,
 }
 //// ANCHOR_END: action_enum
 
@@ -61,12 +59,12 @@ impl<'de> Deserialize<'de> for Action {
           "Quit" => Ok(Action::Quit),
           "Refresh" => Ok(Action::Refresh),
           "Help" => Ok(Action::Help),
-          "ScheduleIncrement" => Ok(Action::ScheduleIncrement),
-          "ScheduleDecrement" => Ok(Action::ScheduleDecrement),
           "ToggleShowHelp" => Ok(Action::ToggleShowHelp),
           "EnterInsert" => Ok(Action::EnterInsert),
           "EnterNormal" => Ok(Action::EnterNormal),
           "ScheduleHealthCheck" => Ok(Action::ScheduleHealthCheck),
+          "Up" => Ok(Action::Up),
+          "Down" => Ok(Action::Down),
 
           data if data.starts_with("Error(") => {
             let error_msg = data.trim_start_matches("Error(").trim_end_matches(")");
