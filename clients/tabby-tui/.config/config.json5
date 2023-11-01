@@ -2,8 +2,8 @@
   "keybindings": {
     "Home": {
       "<q>": "Quit", // Quit the application
-      "<Ctrl-u>": "ScheduleHealthCheck",
-      "<Ctrl-h>": "ToggleShowHelp",
+      "<u>": "ScheduleHealthCheck",
+      "<?>": "ToggleShowHelp",
       "</>": "EnterInsert",
       "<up>": "Up",
       "<down>": "Down",

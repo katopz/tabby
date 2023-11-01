@@ -12,7 +12,9 @@ use super::{Component, Frame};
 use crate::{
   action::Action,
   config::key_event_to_string,
-  core::health::{fetch_chat_view_data, fetch_health_view_data, TabbyChatViewData, TabbyClientViewData},
+  core::api::{
+    fetch_chat_view_data, fetch_health_view_data, stream_tabby, ChatRole, TabbyChatViewData, TabbyClientViewData,
+  },
 };
 
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
@@ -93,22 +95,26 @@ impl Home {
 
         self.main_title = main_title;
       },
-      None => todo!(),
+      None => self.main_title = "⚠️ Tabby not respond".to_owned(),
     }
   }
 
   pub fn schedule_infer(&mut self, prompt: &str) {
     let tx = self.action_tx.clone().unwrap();
     tokio::spawn(async move {
-      let chat_view_data = fetch_chat_view_data().await;
-      tx.send(Action::UpdateChatView(chat_view_data)).unwrap();
+      let callback = |chunk: String| {
+        let msg = TabbyChatViewData { role: ChatRole::Tabby, text: Some(chunk.to_string()) };
+        tx.send(Action::UpdateChatView(msg)).unwrap();
+      };
+
+      fetch_chat_view_data(callback).await;
     });
   }
 
   pub fn update_chat_view(&mut self, chat_view_data: TabbyChatViewData) {
     let text = match chat_view_data.text {
-      Some(text) => format!("tabby: {text}"),
-      None => format!("tabby: An error occurred."),
+      Some(text) => format!("{:?}: {text}", chat_view_data.role),
+      None => format!("{:?}: An error occurred.", chat_view_data.role),
     };
 
     self.add(text);
@@ -129,7 +135,7 @@ impl Component for Home {
         KeyCode::Esc => Action::EnterNormal,
         KeyCode::Enter => {
           if let Some(sender) = &self.action_tx {
-            if let Err(e) = sender.send(Action::CompleteInput(self.input.value().to_string())) {
+            if let Err(e) = sender.send(Action::CompleteInput("Me".to_owned(), self.input.value().to_string())) {
               error!("Failed to send action: {:?}", e);
             }
           }
@@ -154,11 +160,11 @@ impl Component for Home {
       Action::Tick => self.tick(),
       Action::Render => self.render_tick(),
       Action::ToggleShowHelp => self.show_help = !self.show_help,
-      Action::CompleteInput(s) => {
-        self.add(format!("me: {s}"));
-        self.schedule_infer(&s);
+      Action::CompleteInput(talker, word) => {
+        self.add(format!("{talker}: {word}"));
+        self.schedule_infer(&word);
       },
-      Action::CompleteInfer(s) => self.add(format!("tabby: {s}")),
+      Action::CompleteInfer(talker, word) => self.add(format!("{talker}: {word}")),
       Action::EnterNormal => {
         self.mode = Mode::Normal;
       },

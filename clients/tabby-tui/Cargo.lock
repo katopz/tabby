@@ -3611,6 +3611,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "strip-ansi-escapes",
+ "strum 0.25.0",
  "tabby",
  "thiserror",
  "tokio",
