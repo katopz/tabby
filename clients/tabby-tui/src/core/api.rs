@@ -18,7 +18,8 @@ pub enum TabbyApiError {
 }
 
 // TODO: Use env
-const API_URL: &str = "http://192.168.1.33:9090/v1/health";
+const HEALTH_API_URL: &str = "http://192.168.1.33:9090/v1/health";
+const CHAT_API_URL: &str = "http://192.168.1.33:9090/v1/health";
 
 pub async fn fetch_tabby<T: DeserializeOwned>(url: &str) -> Result<T, TabbyApiError> {
   let response = reqwest::get(url).await.map_err(TabbyApiError::RequestError)?;
@@ -34,8 +35,9 @@ where
   let mut stream = response.bytes_stream();
 
   while let Some(item) = stream.next().await {
-    let chunk = item.map_err(TabbyApiError::StreamError)?;
-    callback(format!("Chunk: {:?}", chunk));
+    let chunk_bytes = item.map_err(TabbyApiError::StreamError)?;
+    let chunk_str = std::str::from_utf8(&chunk_bytes).expect("Invalid UTF-8");
+    callback(format!("Chunk: {:?}", chunk_str.to_string()));
   }
 
   Ok(())
@@ -47,7 +49,7 @@ pub struct TabbyClientViewData {
 }
 
 pub async fn fetch_health_view_data() -> TabbyClientViewData {
-  match fetch_tabby::<HealthState>(API_URL).await {
+  match fetch_tabby::<HealthState>(HEALTH_API_URL).await {
     Ok(health_state) => TabbyClientViewData { health_state: Some(health_state) },
     Err(_) => TabbyClientViewData { health_state: None },
   }
@@ -73,7 +75,7 @@ pub async fn fetch_chat_view_data<F>(callback: F)
 where
   F: FnOnce(String) + std::marker::Copy,
 {
-  match stream_tabby("http://httpbin.org/ip", callback).await {
+  match stream_tabby(CHAT_API_URL, callback).await {
     Ok(text) => TabbyChatViewData { role: ChatRole::Tabby, text: Some(format!("{:?}", text)) },
     Err(_) => TabbyChatViewData { role: ChatRole::Tabby, text: None },
   };
