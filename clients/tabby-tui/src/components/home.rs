@@ -1,4 +1,8 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+  collections::HashMap,
+  sync::{Arc, Mutex},
+  time::Duration,
+};
 
 use color_eyre::{eyre::Result, owo_colors::OwoColorize};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -12,8 +16,9 @@ use super::{Component, Frame};
 use crate::{
   action::Action,
   config::key_event_to_string,
-  core::api::{
-    fetch_chat_view_data, fetch_health_view_data, stream_tabby, ChatRole, TabbyChatViewData, TabbyClientViewData,
+  core::{
+    chat::{ChatRole, TabbyChatViewData, TabbyClientViewData},
+    client::{EndPoint, TabbyClient},
   },
 };
 
@@ -42,11 +47,14 @@ pub struct Home {
   pub vertical_scroll_state: ScrollbarState,
   pub vertical_scroll: usize,
   pub vertical_scroll_max: usize,
+
+  pub client: Arc<Mutex<TabbyClient>>,
 }
 
 impl Home {
   pub fn new() -> Self {
-    Self::default()
+    let client = TabbyClient::new(&EndPoint::V1);
+    Self { client: Arc::new(Mutex::new(client)), ..Self::default() }
   }
 
   pub fn keymap(mut self, keymap: HashMap<KeyEvent, Action>) -> Self {
@@ -74,9 +82,11 @@ impl Home {
   }
 
   pub fn schedule_health_check(&mut self) {
+    let client = self.client.clone();
     let tx = self.action_tx.clone().unwrap();
     tokio::spawn(async move {
-      let health_view_data = fetch_health_view_data().await;
+      let client = client.lock().unwrap().clone();
+      let health_view_data = client.get_health().await;
       tx.send(Action::UpdateHealthCheckView(health_view_data)).unwrap();
     });
   }
@@ -99,15 +109,18 @@ impl Home {
     }
   }
 
-  pub fn schedule_infer(&mut self, prompt: &str) {
+  pub fn schedule_infer(&self, prompt: &str) {
+    let client = self.client.clone();
     let tx = self.action_tx.clone().unwrap();
+
     tokio::spawn(async move {
       let callback = |chunk: String| {
         let msg = TabbyChatViewData { role: ChatRole::Tabby, text: Some(chunk.to_string()) };
         tx.send(Action::UpdateChatView(msg)).unwrap();
       };
 
-      fetch_chat_view_data(callback).await;
+      let client = client.lock().unwrap().clone();
+      client.get_chat_completions(callback).await;
     });
   }
 

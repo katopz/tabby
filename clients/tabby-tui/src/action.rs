@@ -5,7 +5,7 @@ use serde::{
   Deserialize, Serialize,
 };
 
-use crate::core::api::{TabbyChatViewData, TabbyClientViewData};
+use crate::core::chat::{TabbyChatViewData, TabbyClientViewData};
 
 //// ANCHOR: action_enum
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
