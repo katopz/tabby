@@ -1,6 +1,6 @@
 use crate::core::error::TabbyApiError;
 use futures::StreamExt;
-use reqwest::{self, header::HeaderMap, Request};
+use reqwest::{self, header::HeaderMap, Client, Request, RequestBuilder};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use strum::EnumString;
 use tabby::serve::HealthState;
@@ -8,33 +8,33 @@ use thiserror::Error;
 
 #[derive(Clone)]
 pub struct HttpProvider {
-  client: reqwest::Client,
-  headers: reqwest::header::HeaderMap,
+  client: Client,
+  headers: HeaderMap,
   url: String,
 }
 
 impl HttpProvider {
   pub fn new(url: &str) -> Self {
-    Self { client: reqwest::Client::new(), headers: reqwest::header::HeaderMap::new(), url: url.to_owned() }
+    Self { client: Client::new(), headers: HeaderMap::new(), url: url.to_owned() }
   }
 
-  pub fn with_client(client: reqwest::Client, url: String) -> Self {
+  pub fn with_client(client: Client, url: String) -> Self {
     let headers = HeaderMap::new();
     HttpProvider { client, url, headers }
   }
 
-  pub fn with_headers(client: reqwest::Client, url: String, headers: HeaderMap) -> Self {
+  pub fn with_headers(client: Client, url: String, headers: HeaderMap) -> Self {
     let headers = HeaderMap::new();
     HttpProvider { client, url, headers }
   }
 
-  pub fn with_client_headers(client: reqwest::Client, url: String, headers: HeaderMap) -> Self {
+  pub fn with_client_headers(client: Client, url: String, headers: HeaderMap) -> Self {
     HttpProvider { client, url, headers }
   }
 
   async fn send_request<T: DeserializeOwned>(
     &self,
-    request_builder: reqwest::RequestBuilder,
+    request_builder: RequestBuilder,
     maybe_body: Option<String>,
   ) -> Result<T, TabbyApiError> {
     let client = if let Some(body) = &maybe_body { request_builder.body(body.clone()) } else { request_builder };
