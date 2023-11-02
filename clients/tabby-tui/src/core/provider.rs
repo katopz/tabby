@@ -1,6 +1,6 @@
 use crate::core::error::TabbyApiError;
 use futures::StreamExt;
-use reqwest::{self, Request};
+use reqwest::{self, header::HeaderMap, Request};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use strum::EnumString;
 use tabby::serve::HealthState;
@@ -17,38 +17,53 @@ impl HttpProvider {
   pub fn new(url: &str) -> Self {
     Self { client: reqwest::Client::new(), headers: reqwest::header::HeaderMap::new(), url: url.to_owned() }
   }
-}
 
-impl HttpProvider {
-  pub async fn get<T: DeserializeOwned>(&self, route_str: &str) -> Result<T, TabbyApiError> {
-    let client = &self.client;
-    let url = format!("{}{}", self.url.clone(), route_str);
-    let headers = self.headers.clone();
-
-    let response = reqwest::get(url).await.map_err(TabbyApiError::RequestError)?;
-    let json = response.json::<T>().await.map_err(TabbyApiError::JsonParseError)?;
-    Ok(json)
+  pub fn with_client(client: reqwest::Client, url: String) -> Self {
+    let headers = HeaderMap::new();
+    HttpProvider { client, url, headers }
   }
 
-  // pub async fn post<T: DeserializeOwned>(&self, request: &Request) -> Result<T, TabbyApiError> {
-  //   let client = &self.client;
-  //   let url = self.url.clone();
-  //   let headers = self.headers.clone();
+  pub fn with_headers(client: reqwest::Client, url: String, headers: HeaderMap) -> Self {
+    let headers = HeaderMap::new();
+    HttpProvider { client, url, headers }
+  }
 
-  //   let response = reqwest::Client::new().post(url).await.map_err(TabbyApiError::RequestError)?;
-  //   let json = response.json::<T>().await.map_err(TabbyApiError::JsonParseError)?;
-  //   Ok(json)
-  // }
+  pub fn with_client_headers(client: reqwest::Client, url: String, headers: HeaderMap) -> Self {
+    HttpProvider { client, url, headers }
+  }
+
+  async fn send_request<T: DeserializeOwned>(
+    &self,
+    request_builder: reqwest::RequestBuilder,
+    maybe_body: Option<String>,
+  ) -> Result<T, TabbyApiError> {
+    let client = if let Some(body) = &maybe_body { request_builder.body(body.clone()) } else { request_builder };
+
+    let response = client.send().await.map_err(TabbyApiError::RequestError)?;
+    response.json::<T>().await.map_err(TabbyApiError::JsonParseError)
+  }
+
+  pub async fn get<T: DeserializeOwned>(&self, route_str: &str) -> Result<T, TabbyApiError> {
+    let url = format!("{}{}", self.url, route_str);
+    self.send_request(self.client.get(&url), None).await
+  }
+
+  pub async fn post<T: DeserializeOwned>(
+    &self,
+    request: &Request,
+    maybe_body: Option<String>,
+  ) -> Result<T, TabbyApiError> {
+    let url = &self.url;
+    let request_builder = self.client.post(url);
+    self.send_request(request_builder, maybe_body).await
+  }
 
   pub async fn stream<F>(&self, route_str: &str, callback: F) -> Result<(), TabbyApiError>
   where
     F: Fn(String),
   {
-    let client = &self.client;
-    let url = format!("{}{}", self.url.clone(), route_str);
-    let headers = self.headers.clone();
-
-    let response = reqwest::get(url).await.map_err(TabbyApiError::RequestError)?;
+    let url = format!("{}{}", self.url, route_str);
+    let response = self.client.get(&url).send().await.map_err(TabbyApiError::RequestError)?;
     let mut stream = response.bytes_stream();
 
     while let Some(item) = stream.next().await {
