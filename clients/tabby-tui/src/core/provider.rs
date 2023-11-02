@@ -13,6 +13,12 @@ pub struct HttpProvider {
   url: String,
 }
 
+fn get_api_url(url: &str, path: &str) -> String {
+  let mut url = url.to_owned();
+  url.push_str(path);
+  url
+}
+
 impl HttpProvider {
   pub fn new(url: &str) -> Self {
     Self { client: Client::new(), headers: HeaderMap::new(), url: url.to_owned() }
@@ -38,31 +44,29 @@ impl HttpProvider {
     maybe_body: Option<String>,
   ) -> Result<T, TabbyApiError> {
     let client = if let Some(body) = &maybe_body { request_builder.body(body.clone()) } else { request_builder };
-
     let response = client.send().await.map_err(TabbyApiError::RequestError)?;
     response.json::<T>().await.map_err(TabbyApiError::JsonParseError)
   }
 
-  pub async fn get<T: DeserializeOwned>(&self, route_str: &str) -> Result<T, TabbyApiError> {
-    let url = format!("{}{}", self.url, route_str);
-    self.send_request(self.client.get(&url), None).await
+  pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, TabbyApiError> {
+    let url = get_api_url(&self.url, path);
+    let request_builder = self.client.get(url);
+
+    self.send_request::<T>(request_builder, None).await
   }
 
-  pub async fn post<T: DeserializeOwned>(
-    &self,
-    request: &Request,
-    maybe_body: Option<String>,
-  ) -> Result<T, TabbyApiError> {
-    let url = &self.url;
+  pub async fn post<T: DeserializeOwned>(&self, path: &str, maybe_body: Option<String>) -> Result<T, TabbyApiError> {
+    let url = get_api_url(&self.url, path);
     let request_builder = self.client.post(url);
-    self.send_request(request_builder, maybe_body).await
+
+    self.send_request::<T>(request_builder, maybe_body).await
   }
 
-  pub async fn stream<F>(&self, route_str: &str, callback: F) -> Result<(), TabbyApiError>
+  pub async fn stream<F>(&self, path: &str, callback: F) -> Result<(), TabbyApiError>
   where
     F: Fn(String),
   {
-    let url = format!("{}{}", self.url, route_str);
+    let url = get_api_url(&self.url, path);
     let response = self.client.get(&url).send().await.map_err(TabbyApiError::RequestError)?;
     let mut stream = response.bytes_stream();
 
