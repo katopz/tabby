@@ -51,7 +51,7 @@ pub struct Home {
   pub client: Arc<Mutex<TabbyClient>>,
 }
 
-const API_URL: &str = "http://192.168.1.33:9090/";
+const API_URL: &str = "http://192.168.1.33:9090";
 
 impl Home {
   pub fn new() -> Self {
