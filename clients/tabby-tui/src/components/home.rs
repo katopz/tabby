@@ -21,6 +21,7 @@ use crate::{
     client::{EndPoint, TabbyClient},
   },
 };
+use tabby::serve::chat::Message;
 
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
 pub enum Mode {
@@ -49,6 +50,7 @@ pub struct Home {
   pub vertical_scroll_max: usize,
 
   pub client: Arc<Mutex<TabbyClient>>,
+  pub messages: Vec<Message>,
 }
 
 const API_URL: &str = "http://192.168.1.33:9090";
@@ -111,18 +113,22 @@ impl Home {
     }
   }
 
-  pub fn schedule_infer(&self, prompt: &str) {
+  pub fn schedule_infer(&mut self, prompt: &str) {
     let client = self.client.clone();
     let tx = self.action_tx.clone().unwrap();
 
+    // Push
+    self.messages.push(Message { role: ChatRole::User.to_string(), content: prompt.to_owned() });
+    let messages = self.messages.clone();
+
     tokio::spawn(async move {
       let callback = |chunk: String| {
-        let msg = TabbyChatViewData { role: ChatRole::Tabby, text: Some(chunk.to_string()) };
+        let msg = TabbyChatViewData { role: ChatRole::Assistant, text: Some(chunk.to_string()) };
         tx.send(Action::UpdateChatView(msg)).unwrap();
       };
 
       let client = client.lock().unwrap().clone();
-      client.get_chat_completions(callback).await;
+      client.get_chat_completions(&messages, callback).await;
     });
   }
 

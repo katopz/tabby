@@ -1,8 +1,8 @@
-mod chat;
+pub mod chat;
 mod completions;
 mod engine;
 mod events;
-mod health;
+pub mod health;
 mod search;
 mod ui;
 
@@ -25,7 +25,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 pub use self::{
     engine::{create_engine, EngineInfo},
-    health::*,
+    health::HealthState,
     search::IndexServer,
 };
 use crate::fatal;

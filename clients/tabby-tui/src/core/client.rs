@@ -1,7 +1,7 @@
 use crate::core::provider::Provider;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
-use tabby::HealthState;
+use tabby::{chat::Message, serve::health::HealthState};
 
 use super::chat::{ChatRole, TabbyChatViewData, TabbyClientViewData};
 
@@ -19,6 +19,10 @@ pub enum EndPoint {
 pub enum Route {
   #[strum(serialize = "/health")]
   Health,
+  // TOFIX: failed to use 2 models for code and chat
+  // #[strum(serialize = "/chat/completions")]
+  #[strum(serialize = "/health")]
+  ChatCompletions,
 }
 
 #[derive(Clone)]
@@ -52,15 +56,15 @@ impl TabbyClient {
     }
   }
 
-  pub async fn get_chat_completions<F>(&self, callback: F)
+  pub async fn get_chat_completions<F>(&self, massages: &Vec<Message>, callback: F)
   where
     F: Fn(String),
   {
     let Provider::Http(provider) = &self.provider;
 
-    match provider.stream(&Route::Health.to_string(), callback).await {
-      Ok(text) => TabbyChatViewData { role: ChatRole::Tabby, text: Some(format!("{:?}", text)) },
-      Err(_) => TabbyChatViewData { role: ChatRole::Tabby, text: None },
+    match provider.stream(&Route::ChatCompletions.to_string(), massages, callback).await {
+      Ok(text) => TabbyChatViewData { role: ChatRole::Assistant, text: Some(format!("{:?}", text)) },
+      Err(_) => TabbyChatViewData { role: ChatRole::Assistant, text: None },
     };
   }
 }

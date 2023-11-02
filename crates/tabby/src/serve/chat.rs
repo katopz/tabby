@@ -44,8 +44,8 @@ pub struct ChatCompletionRequest {
 
 #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
 pub struct Message {
-    role: String,
-    content: String,
+    pub role: String,
+    pub content: String,
 }
 
 #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]

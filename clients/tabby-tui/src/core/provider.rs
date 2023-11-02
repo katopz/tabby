@@ -3,7 +3,7 @@ use futures::StreamExt;
 use reqwest::{self, header::HeaderMap, Client, Request, RequestBuilder};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use strum::EnumString;
-use tabby::serve::HealthState;
+use tabby::{chat::Message, serve::health::HealthState};
 use thiserror::Error;
 
 #[derive(Clone)]
@@ -62,12 +62,14 @@ impl HttpProvider {
     self.send_request::<T>(request_builder, maybe_body).await
   }
 
-  pub async fn stream<F>(&self, path: &str, callback: F) -> Result<(), TabbyApiError>
+  pub async fn stream<F>(&self, path: &str, messages: &Vec<Message>, callback: F) -> Result<(), TabbyApiError>
   where
     F: Fn(String),
   {
     let url = get_api_url(&self.url, path);
-    let response = self.client.get(&url).send().await.map_err(TabbyApiError::RequestError)?;
+    let request_builder = self.client.post(url).json(messages);
+
+    let response = request_builder.send().await.map_err(TabbyApiError::RequestError)?;
     let mut stream = response.bytes_stream();
 
     while let Some(item) = stream.next().await {
