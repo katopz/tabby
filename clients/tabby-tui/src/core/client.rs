@@ -37,7 +37,7 @@ impl TabbyClient {
   pub fn new(api_url: &str, endpoint: &EndPoint) -> Self {
     let endpoint_url_string = match endpoint {
       EndPoint::CustomUrl(url) => url.to_string(),
-      _ => endpoint.to_string(),
+      _ => format!("{}{}", api_url, endpoint.to_string()),
     };
 
     Self { provider: Provider::new(&endpoint_url_string) }
