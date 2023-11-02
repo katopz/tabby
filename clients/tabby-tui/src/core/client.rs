@@ -7,20 +7,12 @@ use super::chat::{ChatRole, TabbyChatViewData, TabbyClientViewData};
 
 #[derive(EnumString, Display, Debug)]
 pub enum EndPoint {
-  #[strum(serialize = "http://192.168.1.33:9090/v1")]
+  #[strum(serialize = "/v1")]
   V1,
-  #[strum(serialize = "http://192.168.1.33:9090/v1beta")]
+  #[strum(serialize = "/v1beta")]
   V1Beta,
   #[strum(disabled)]
   CustomUrl(String),
-}
-
-#[derive(EnumString, Display, Debug)]
-pub enum VersionId {
-  #[strum(serialize = "v1")]
-  V1,
-  #[strum(serialize = "v1beta")]
-  V1Beta,
 }
 
 #[derive(EnumString, Display, Debug)]
@@ -42,7 +34,7 @@ impl Default for TabbyClient {
 }
 
 impl TabbyClient {
-  pub fn new(endpoint: &EndPoint) -> Self {
+  pub fn new(api_url: &str, endpoint: &EndPoint) -> Self {
     let endpoint_url_string = match endpoint {
       EndPoint::CustomUrl(url) => url.to_string(),
       _ => endpoint.to_string(),
