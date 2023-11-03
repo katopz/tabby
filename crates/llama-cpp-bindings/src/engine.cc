@@ -88,6 +88,22 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
     model_(std::move(model)),
     ctx_(std::move(ctx)) {
       batch_ = llama_batch_init(N_CTX * N_CONCURRENT_REQUESTS, 0, 1);
+      // warm up
+      {
+        for (int i = 0; i < 16; ++i) {
+          batch_.token[i] = 0;
+          batch_.pos[i] = i;
+          batch_.n_seq_id[0] = 1;
+          batch_.seq_id[i][0] = 0;
+          batch_.logits[i] = false;
+        }
+
+        if (!llama_decode(ctx_.get(), batch_)) {
+          fprintf(stderr, "%s: warmup failed\n", __func__);
+        }
+
+        llama_kv_cache_clear(ctx_.get());
+      }
   }
 
   ~TextInferenceEngineImpl() {
@@ -230,9 +246,14 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
         }
 
         if (request.multibyte_pending == 0) {
-          rust::String generated_text = is_eos ? "" : request.generated_text;
-          result.push_back({request.id, generated_text});
+          rust::String generated_text;
+          try {
+            generated_text = is_eos ? "" : request.generated_text;
+          } catch (const std::invalid_argument& e) {
+            fprintf(stderr, "%s:%d [%s] - ignoring non utf-8/utf-16 output\n", __FILE__, __LINE__, __func__);
+          }
 
+          result.push_back({request.id, generated_text});
           request.generated_text.clear();
         }
       }
