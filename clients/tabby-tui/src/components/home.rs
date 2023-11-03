@@ -142,6 +142,15 @@ impl Home {
     self.messages.push(message);
   }
 
+  fn update_latest_message(&mut self, message: Message) {
+    if let Some(last_idx) = self.messages.len().checked_sub(1) {
+      // Remove the last element
+      self.messages.pop();
+      // Push the new message to the end of the vector
+      self.messages.push(message);
+    }
+  }
+
   pub fn schedule_infer(&mut self, prompt: &str) {
     let client_beta = self.client_beta.clone();
     let tx = self.action_tx.clone().unwrap();
@@ -155,23 +164,28 @@ impl Home {
     let id = self.id.clone();
     let messages = self.messages.clone();
     tokio::spawn(async move {
-      let callback = |chunk: String| {
-        let msg = TabbyChatViewData { role: ChatRole::Assistant, text: Some(chunk.to_string()) };
+      let stream_callback = |chunk: String| {
+        let msg = TabbyChatViewData { role: ChatRole::Assistant, text: chunk.to_string() };
         tx.send(Action::StreamChatView(msg)).unwrap();
       };
 
+      let callback = |tabby_chat_view_data: TabbyChatViewData| {
+        tx.send(Action::UpdateLatestAssistantMessage(Message {
+          role: tabby_chat_view_data.role.to_string(),
+          content: tabby_chat_view_data.text.to_owned(),
+        }))
+        .unwrap();
+      };
+
       let client_beta = client_beta.lock().unwrap().clone();
-      client_beta.get_chat_completions(&id, &messages, callback).await;
+      // FIXME: use Message from response instead of TabbyChatViewData?
+      let tabby_chat_view_data = client_beta.get_chat_completions(&id, &messages, stream_callback).await;
+      callback(tabby_chat_view_data);
     });
   }
 
   pub fn stream_chat_view(&mut self, chat_view_data: TabbyChatViewData) {
-    let text = match chat_view_data.text {
-      Some(text) => text,
-      None => format!("{:?}: An error occurred.", chat_view_data.role),
-    };
-
-    self.stream(text);
+    self.stream(chat_view_data.text);
   }
 }
 
@@ -189,9 +203,11 @@ impl Component for Home {
         KeyCode::Esc => Action::EnterNormal,
         KeyCode::Enter => {
           if let Some(sender) = &self.action_tx {
-            if let Err(e) = sender.send(Action::CompleteInput("Me".to_owned(), self.input.value().to_string())) {
+            if let Err(e) = sender.send(Action::CompleteInput("user".to_owned(), self.input.value().to_string())) {
               error!("Failed to send action: {:?}", e);
             }
+
+            self.input.reset();
           }
           Action::EnterNormal
         },
@@ -249,6 +265,9 @@ impl Component for Home {
       },
       Action::StreamChatView(chat_view_data) => {
         self.stream_chat_view(chat_view_data);
+      },
+      Action::UpdateLatestAssistantMessage(message) => {
+        self.update_latest_message(message);
       },
       _ => (),
     }

@@ -15,7 +15,7 @@ pub enum ChatRole {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct TabbyChatViewData {
   pub role: ChatRole,
-  pub text: Option<String>,
+  pub text: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]

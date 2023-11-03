@@ -4,6 +4,7 @@ use serde::{
   de::{self, Deserializer, Visitor},
   Deserialize, Serialize,
 };
+use tabby::chat::Message;
 
 use crate::core::chat::{TabbyChatViewData, TabbyClientViewData};
 
@@ -30,6 +31,7 @@ pub enum Action {
   ScheduleHealthCheck,
   UpdateHealthCheckView(TabbyClientViewData),
   StreamChatView(TabbyChatViewData),
+  UpdateLatestAssistantMessage(Message),
   Up,
   Down,
 }

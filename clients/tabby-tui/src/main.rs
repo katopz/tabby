@@ -8,9 +8,9 @@ pub mod app;
 pub mod cli;
 pub mod components;
 pub mod config;
+pub mod core;
 pub mod tui;
 pub mod utils;
-pub mod core;
 
 use clap::Parser;
 use cli::Cli;
@@ -20,7 +20,6 @@ use crate::{
   app::App,
   utils::{initialize_logging, initialize_panic_handler, version},
 };
-
 
 async fn tokio_main() -> Result<()> {
   initialize_logging()?;

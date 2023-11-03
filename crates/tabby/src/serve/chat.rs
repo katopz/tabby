@@ -42,7 +42,7 @@ pub struct ChatCompletionRequest {
     messages: Vec<Message>,
 }
 
-#[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Message {
     pub role: String,
     pub content: String,

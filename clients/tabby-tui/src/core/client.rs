@@ -50,19 +50,20 @@ impl TabbyClient {
 
     match provider.get::<HealthState>(&Route::Health.to_string()).await {
       Ok(health_state) => TabbyClientViewData { health_state: Some(health_state) },
+      // FIXME: Forward error
       Err(_) => TabbyClientViewData { health_state: None },
     }
   }
 
-  pub async fn get_chat_completions<F>(&self, id: &str, massages: &Vec<Message>, callback: F)
+  pub async fn get_chat_completions<F>(&self, id: &str, messages: &Vec<Message>, callback: F) -> TabbyChatViewData
   where
     F: Fn(String),
   {
     let Provider::Http(provider) = &self.provider;
 
-    match provider.stream(&Route::ChatCompletions.to_string(), id, massages, callback).await {
-      Ok(text) => TabbyChatViewData { role: ChatRole::Assistant, text: Some(format!("{:?}", text)) },
-      Err(_) => TabbyChatViewData { role: ChatRole::Assistant, text: None },
-    };
+    match provider.stream(&Route::ChatCompletions.to_string(), id, messages, callback).await {
+      Ok(text) => TabbyChatViewData { role: ChatRole::Assistant, text: format!("{:?}", text) },
+      Err(err) => TabbyChatViewData { role: ChatRole::Assistant, text: format!("{err:?}") },
+    }
   }
 }

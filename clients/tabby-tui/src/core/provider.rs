@@ -73,7 +73,7 @@ impl HttpProvider {
     id: &str,
     messages: &Vec<Message>,
     callback: F,
-  ) -> Result<Vec<ChatCompletionChunk>, TabbyApiError>
+  ) -> Result<String, TabbyApiError>
   where
     F: Fn(String),
   {
@@ -83,8 +83,8 @@ impl HttpProvider {
       .filter(|message| message.content.len() > 0)
       .map(|message| {
         serde_json::json!({
-            "role": message.role,
-            "content": message.content,
+            "role": message.role.clone(),
+            "content": message.content.clone(),
         })
       })
       .collect();
@@ -94,13 +94,15 @@ impl HttpProvider {
         "id": id,
     });
 
+    let json_data_str: String = json_data.to_string();
+
     let request_builder = self.client.post(url).header("Content-Type", "application/json").json(&json_data);
 
     // Stream the response body as bytes
     let response = request_builder.send().await.map_err(TabbyApiError::RequestError)?;
     let mut body = response.bytes_stream();
 
-    let mut chunks: Vec<ChatCompletionChunk> = Vec::new();
+    let mut combined_chunk_str = "".to_string();
     while let Some(chunk) = body.next().await {
       let chunk_bytes = chunk.map_err(TabbyApiError::StreamError)?;
       let chunk_text = std::str::from_utf8(&chunk_bytes).map_err(TabbyApiError::StreamUtf8Error)?;
@@ -108,10 +110,11 @@ impl HttpProvider {
         serde_json::from_str::<ChatCompletionChunk>(&chunk_text).map_err(TabbyApiError::StreamJsonError)?;
 
       callback(chat_completion_chunk.content.clone());
-      chunks.push(chat_completion_chunk);
+
+      combined_chunk_str.push_str(&chat_completion_chunk.content.clone());
     }
 
-    Ok(chunks)
+    Ok(combined_chunk_str)
   }
 }
 
