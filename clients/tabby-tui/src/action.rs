@@ -29,7 +29,7 @@ pub enum Action {
   Update,
   ScheduleHealthCheck,
   UpdateHealthCheckView(TabbyClientViewData),
-  UpdateChatView(TabbyChatViewData),
+  StreamChatView(TabbyChatViewData),
   Up,
   Down,
 }

@@ -19,9 +19,7 @@ pub enum EndPoint {
 pub enum Route {
   #[strum(serialize = "/health")]
   Health,
-  // TOFIX: failed to use 2 models for code and chat
-  // #[strum(serialize = "/chat/completions")]
-  #[strum(serialize = "/health")]
+  #[strum(serialize = "/chat/completions")]
   ChatCompletions,
 }
 
@@ -56,13 +54,13 @@ impl TabbyClient {
     }
   }
 
-  pub async fn get_chat_completions<F>(&self, massages: &Vec<Message>, callback: F)
+  pub async fn get_chat_completions<F>(&self, id: &str, massages: &Vec<Message>, callback: F)
   where
     F: Fn(String),
   {
     let Provider::Http(provider) = &self.provider;
 
-    match provider.stream(&Route::ChatCompletions.to_string(), massages, callback).await {
+    match provider.stream(&Route::ChatCompletions.to_string(), id, massages, callback).await {
       Ok(text) => TabbyChatViewData { role: ChatRole::Assistant, text: Some(format!("{:?}", text)) },
       Err(_) => TabbyChatViewData { role: ChatRole::Assistant, text: None },
     };

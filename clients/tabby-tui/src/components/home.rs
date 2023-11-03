@@ -11,6 +11,7 @@ use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::trace;
 use tui_input::{backend::crossterm::EventHandler, Input};
+use uuid::Uuid;
 
 use super::{Component, Frame};
 use crate::{
@@ -50,6 +51,8 @@ pub struct Home {
   pub vertical_scroll_max: usize,
 
   pub client: Arc<Mutex<TabbyClient>>,
+  pub client_beta: Arc<Mutex<TabbyClient>>,
+  pub id: String,
   pub messages: Vec<Message>,
 }
 
@@ -58,7 +61,15 @@ const API_URL: &str = "http://192.168.1.33:9090";
 impl Home {
   pub fn new() -> Self {
     let client = TabbyClient::new(API_URL, &EndPoint::V1);
-    Self { client: Arc::new(Mutex::new(client)), ..Self::default() }
+    let client_beta = TabbyClient::new(API_URL, &EndPoint::V1Beta);
+
+    let random_id = Uuid::new_v4().to_string();
+    Self {
+      client: Arc::new(Mutex::new(client)),
+      client_beta: Arc::new(Mutex::new(client_beta)),
+      id: random_id,
+      ..Self::default()
+    }
   }
 
   pub fn keymap(mut self, keymap: HashMap<KeyEvent, Action>) -> Self {
@@ -79,6 +90,13 @@ impl Home {
 
   pub fn add(&mut self, s: String) {
     self.text.push(s)
+  }
+
+  pub fn stream(&mut self, s: String) {
+    let maybe_chunk = self.text.last_mut();
+    if let Some(chunk) = maybe_chunk {
+      chunk.push_str(s.as_str());
+    }
   }
 
   pub fn decrement(&mut self, i: usize) {
@@ -113,32 +131,47 @@ impl Home {
     }
   }
 
+  fn update_messages_and_view(&mut self, message: Message) {
+    let content = message.content.clone();
+    if content.len() == 0 {
+      self.add(format!("{}:", message.role.clone()));
+    } else {
+      self.add(format!("{}: {}", message.role.clone(), content));
+    }
+
+    self.messages.push(message);
+  }
+
   pub fn schedule_infer(&mut self, prompt: &str) {
-    let client = self.client.clone();
+    let client_beta = self.client_beta.clone();
     let tx = self.action_tx.clone().unwrap();
 
-    // Push
-    self.messages.push(Message { role: ChatRole::User.to_string(), content: prompt.to_owned() });
-    let messages = self.messages.clone();
+    // Push user
+    self.update_messages_and_view(Message { role: "user".to_string(), content: prompt.to_owned() });
 
+    // Wait for Tabby
+    self.update_messages_and_view(Message { role: "assistant".to_string(), content: "".to_owned() });
+
+    let id = self.id.clone();
+    let messages = self.messages.clone();
     tokio::spawn(async move {
       let callback = |chunk: String| {
         let msg = TabbyChatViewData { role: ChatRole::Assistant, text: Some(chunk.to_string()) };
-        tx.send(Action::UpdateChatView(msg)).unwrap();
+        tx.send(Action::StreamChatView(msg)).unwrap();
       };
 
-      let client = client.lock().unwrap().clone();
-      client.get_chat_completions(&messages, callback).await;
+      let client_beta = client_beta.lock().unwrap().clone();
+      client_beta.get_chat_completions(&id, &messages, callback).await;
     });
   }
 
-  pub fn update_chat_view(&mut self, chat_view_data: TabbyChatViewData) {
+  pub fn stream_chat_view(&mut self, chat_view_data: TabbyChatViewData) {
     let text = match chat_view_data.text {
-      Some(text) => format!("{:?}: {text}", chat_view_data.role),
+      Some(text) => text,
       None => format!("{:?}: An error occurred.", chat_view_data.role),
     };
 
-    self.add(text);
+    self.stream(text);
   }
 }
 
@@ -182,7 +215,6 @@ impl Component for Home {
       Action::Render => self.render_tick(),
       Action::ToggleShowHelp => self.show_help = !self.show_help,
       Action::CompleteInput(talker, word) => {
-        self.add(format!("{talker}: {word}"));
         self.schedule_infer(&word);
       },
       Action::CompleteInfer(talker, word) => self.add(format!("{talker}: {word}")),
@@ -215,8 +247,8 @@ impl Component for Home {
           self.vertical_scroll = self.vertical_scroll.saturating_add(1);
         }
       },
-      Action::UpdateChatView(chat_view_data) => {
-        self.update_chat_view(chat_view_data);
+      Action::StreamChatView(chat_view_data) => {
+        self.stream_chat_view(chat_view_data);
       },
       _ => (),
     }

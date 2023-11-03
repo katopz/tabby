@@ -3315,6 +3315,7 @@ dependencies = [
  "tracing-error",
  "tracing-subscriber",
  "tui-input",
+ "uuid 1.5.0",
 ]
 
 [[package]]

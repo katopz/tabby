@@ -50,7 +50,7 @@ pub struct Message {
 
 #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
 pub struct ChatCompletionChunk {
-    content: String,
+    pub content: String,
 }
 
 #[utoipa::path(

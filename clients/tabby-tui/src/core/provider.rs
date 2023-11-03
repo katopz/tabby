@@ -2,9 +2,14 @@ use crate::core::error::TabbyApiError;
 use futures::StreamExt;
 use reqwest::{self, header::HeaderMap, Client, Request, RequestBuilder};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::json;
 use strum::EnumString;
-use tabby::{chat::Message, serve::health::HealthState};
+use tabby::{
+  chat::{ChatCompletionChunk, Message},
+  serve::health::HealthState,
+};
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct HttpProvider {
@@ -62,23 +67,51 @@ impl HttpProvider {
     self.send_request::<T>(request_builder, maybe_body).await
   }
 
-  pub async fn stream<F>(&self, path: &str, messages: &Vec<Message>, callback: F) -> Result<(), TabbyApiError>
+  pub async fn stream<F>(
+    &self,
+    path: &str,
+    id: &str,
+    messages: &Vec<Message>,
+    callback: F,
+  ) -> Result<Vec<ChatCompletionChunk>, TabbyApiError>
   where
     F: Fn(String),
   {
     let url = get_api_url(&self.url, path);
-    let request_builder = self.client.post(url).json(messages);
+    let json_messages: Vec<serde_json::Value> = messages
+      .iter()
+      .filter(|message| message.content.len() > 0)
+      .map(|message| {
+        serde_json::json!({
+            "role": message.role,
+            "content": message.content,
+        })
+      })
+      .collect();
 
+    let json_data = serde_json::json!({
+        "messages": json_messages,
+        "id": id,
+    });
+
+    let request_builder = self.client.post(url).header("Content-Type", "application/json").json(&json_data);
+
+    // Stream the response body as bytes
     let response = request_builder.send().await.map_err(TabbyApiError::RequestError)?;
-    let mut stream = response.bytes_stream();
+    let mut body = response.bytes_stream();
 
-    while let Some(item) = stream.next().await {
-      let chunk_bytes = item.map_err(TabbyApiError::StreamError)?;
-      let chunk_str = std::str::from_utf8(&chunk_bytes).expect("Invalid UTF-8");
-      callback(format!("Chunk: {:?}", chunk_str.to_string()));
+    let mut chunks: Vec<ChatCompletionChunk> = Vec::new();
+    while let Some(chunk) = body.next().await {
+      let chunk_bytes = chunk.map_err(TabbyApiError::StreamError)?;
+      let chunk_text = std::str::from_utf8(&chunk_bytes).map_err(TabbyApiError::StreamUtf8Error)?;
+      let chat_completion_chunk =
+        serde_json::from_str::<ChatCompletionChunk>(&chunk_text).map_err(TabbyApiError::StreamJsonError)?;
+
+      callback(chat_completion_chunk.content.clone());
+      chunks.push(chat_completion_chunk);
     }
 
-    Ok(())
+    Ok(chunks)
   }
 }
 
