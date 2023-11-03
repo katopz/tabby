@@ -2,6 +2,7 @@
 
 ## Notice
 * llama.cpp backend (CPU, Metal) now requires a redownload of gguf model due to upstream format changes: https://github.com/TabbyML/tabby/pull/645 https://github.com/ggerganov/llama.cpp/pull/3252
+* Due to indexing format changes, the `~/.tabby/index` needs to be manually removed before any further runs of `tabby scheduler`.
 
 ## Features
 
@@ -10,6 +11,7 @@
 * Switch cpu backend to llama.cpp: https://github.com/TabbyML/tabby/pull/638
 * add `server.completion_timeout` to control the code completion interface timeout: https://github.com/TabbyML/tabby/pull/637
 * Switch cuda backend to llama.cpp: https://github.com/TabbyML/tabby/pull/656
+* Switch tokenizer to llama.cpp, so tabby no longer need to download additional tokenizer file: https://github.com/TabbyML/tabby/pull/683
 
 # v0.4.0
 
