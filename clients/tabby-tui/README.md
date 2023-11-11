@@ -7,7 +7,11 @@ A [TabbyML](https://github.com/tabbyml) terminal ui on client side with [Rataui]
 > Serving endpoint.
 
 ```bash
-sudo docker run -it --gpus all -p 8080:8080 -v $HOME/.tabby:/data tabbyml/tabby serve --model TabbyML/Mistral-7B --device cuda
+# completions
+docker run -it --gpus all -p 8080:8080 -v $HOME/.tabby:/data tabby_cuda12_2 serve --model TabbyML/Mistral-7B --device cuda
+
+# completions + chat
+docker run -it --gpus all -p 8080:8080 -v $HOME/.tabby:/data tabbyml/tabby:nightly serve --model TabbyML/StarCoder-1B --device cuda --chat-model TabbyML/Mistral-7B
 ```
 
 ## Dev
@@ -24,4 +28,8 @@ cargo watch -w src -x run
 - CI/CD
   ```
   [![CI](https://github.com/tabby-tui/workflows/CI/badge.svg)](https://github.com/tabby-tui/actions)
+  ```
+- New build
+  ```
+  docker build -t local/llama.cpp:full-cuda -f .devops/full-cuda.Dockerfile .
   ```
