@@ -107,7 +107,7 @@ impl HttpProvider {
       let chunk_bytes = chunk.map_err(TabbyApiError::StreamError)?;
       let chunk_text = std::str::from_utf8(&chunk_bytes).map_err(TabbyApiError::StreamUtf8Error)?;
       let chat_completion_chunk =
-        serde_json::from_str::<ChatCompletionChunk>(&chunk_text).map_err(TabbyApiError::StreamJsonError)?;
+        serde_json::from_str::<ChatCompletionChunk>(chunk_text).map_err(TabbyApiError::StreamJsonError)?;
 
       callback(chat_completion_chunk.content.clone());
 
