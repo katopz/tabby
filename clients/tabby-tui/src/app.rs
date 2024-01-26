@@ -34,6 +34,7 @@ impl App {
     let fps = FpsCounter::new();
     let config = Config::new()?;
     let mode = Mode::Home;
+
     Ok(Self {
       tick_rate,
       frame_rate,

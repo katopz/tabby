@@ -3,10 +3,6 @@ name = "tabby"
 version = "0.7.0"
 edition = "2021"
 
-[lib]
-name = "tabby"
-path = "src/lib.rs"
-
 [features]
 default = ["ee"]
 ee = ["dep:tabby-webserver"]

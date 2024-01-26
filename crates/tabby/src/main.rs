@@ -1,12 +1,4 @@
-//! Core tabby functionality. Defines primary API and CLI behavior.
-mod routes;
-mod services;
-
-mod download;
-mod serve;
-
-#[cfg(feature = "ee")]
-mod worker;
+pub use tabby::*;
 
 use clap::{Parser, Subcommand};
 use opentelemetry::{
@@ -15,7 +7,6 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
-use tabby::fatal;
 use tabby_common::config::Config;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
@@ -70,54 +61,6 @@ pub struct SchedulerArgs {
     now: bool,
 }
 
-#[derive(clap::ValueEnum, strum::Display, PartialEq, Clone)]
-pub enum Device {
-    #[strum(serialize = "cpu")]
-    Cpu,
-
-    #[cfg(feature = "cuda")]
-    #[strum(serialize = "cuda")]
-    Cuda,
-
-    #[cfg(feature = "rocm")]
-    #[strum(serialize = "rocm")]
-    Rocm,
-
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    #[strum(serialize = "metal")]
-    Metal,
-
-    #[cfg(feature = "experimental-http")]
-    #[strum(serialize = "experimental_http")]
-    ExperimentalHttp,
-}
-
-impl Device {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    pub fn ggml_use_gpu(&self) -> bool {
-        *self == Device::Metal
-    }
-
-    #[cfg(feature = "cuda")]
-    pub fn ggml_use_gpu(&self) -> bool {
-        *self == Device::Cuda
-    }
-
-    #[cfg(feature = "rocm")]
-    pub fn ggml_use_gpu(&self) -> bool {
-        *self == Device::Rocm
-    }
-
-    #[cfg(not(any(
-        all(target_os = "macos", target_arch = "aarch64"),
-        feature = "cuda",
-        feature = "rocm",
-    )))]
-    pub fn ggml_use_gpu(&self) -> bool {
-        false
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -146,6 +89,23 @@ async fn main() {
     }
 
     opentelemetry::global::shutdown_tracer_provider();
+}
+
+#[macro_export]
+macro_rules! fatal {
+    ($msg:expr) => {
+        ({
+            tracing::error!($msg);
+            std::process::exit(1);
+        })
+    };
+
+    ($fmt:expr, $($arg:tt)*) => {
+        ({
+            tracing::error!($fmt, $($arg)*);
+            std::process::exit(1);
+        })
+    };
 }
 
 fn init_logging(otlp_endpoint: Option<String>) {

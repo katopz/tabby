@@ -12,6 +12,7 @@ members = [
     "crates/juniper-axum",
     "ee/tabby-webserver",
     "ee/tabby-db",
+    "clients/tabby-tui",
 ]
 exclude = [
     "clients/tabby-tui"

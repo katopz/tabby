@@ -16,8 +16,9 @@ use thiserror::Error;
 use tracing::debug;
 use utoipa::ToSchema;
 
-use super::model;
 use crate::Device;
+
+use super::model;
 
 #[derive(Error, Debug)]
 pub enum CompletionError {

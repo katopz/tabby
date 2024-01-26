@@ -1,15 +1,19 @@
-use crate::core::error::TabbyApiError;
 use futures::StreamExt;
 use reqwest::{self, header::HeaderMap, Client, Request, RequestBuilder};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::json;
 use strum::EnumString;
-use tabby::{
-  chat::{ChatCompletionChunk, Message},
-  serve::health::HealthState,
-};
+use tabby_common::api::event::Message;
 use thiserror::Error;
 use uuid::Uuid;
+
+use crate::core::error::TabbyApiError;
+
+use utoipa::ToSchema;
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+pub struct ChatCompletionChunkContent {
+  pub content: String,
+}
 
 #[derive(Clone)]
 pub struct HttpProvider {
@@ -71,7 +75,7 @@ impl HttpProvider {
     &self,
     path: &str,
     id: &str,
-    messages: &Vec<Message>,
+    messages: &[Message],
     callback: F,
   ) -> Result<String, TabbyApiError>
   where
@@ -80,7 +84,7 @@ impl HttpProvider {
     let url = get_api_url(&self.url, path);
     let json_messages: Vec<serde_json::Value> = messages
       .iter()
-      .filter(|message| message.content.len() > 0)
+      .filter(|message| !message.content.is_empty())
       .map(|message| {
         serde_json::json!({
             "role": message.role.clone(),
@@ -95,7 +99,6 @@ impl HttpProvider {
     });
 
     let json_data_str: String = json_data.to_string();
-
     let request_builder = self.client.post(url).header("Content-Type", "application/json").json(&json_data);
 
     // Stream the response body as bytes
@@ -107,11 +110,11 @@ impl HttpProvider {
       let chunk_bytes = chunk.map_err(TabbyApiError::StreamError)?;
       let chunk_text = std::str::from_utf8(&chunk_bytes).map_err(TabbyApiError::StreamUtf8Error)?;
       let chat_completion_chunk =
-        serde_json::from_str::<ChatCompletionChunk>(chunk_text).map_err(TabbyApiError::StreamJsonError)?;
+        serde_json::from_str::<ChatCompletionChunkContent>(chunk_text).map_err(TabbyApiError::StreamJsonError)?;
 
-      callback(chat_completion_chunk.content.clone());
-
-      combined_chunk_str.push_str(&chat_completion_chunk.content.clone());
+      let content = chat_completion_chunk.content.clone();
+      callback(content.clone());
+      combined_chunk_str.push_str(&content);
     }
 
     Ok(combined_chunk_str)

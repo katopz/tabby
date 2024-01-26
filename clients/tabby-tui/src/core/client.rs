@@ -1,9 +1,10 @@
-use crate::core::provider::Provider;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
-use tabby::{chat::Message, serve::health::HealthState};
+use tabby::services::health::HealthState;
+use tabby_common::api::event::Message;
 
 use super::chat::{ChatRole, TabbyChatViewData, TabbyClientViewData};
+use crate::core::provider::Provider;
 
 #[derive(EnumString, Display, Debug)]
 pub enum EndPoint {

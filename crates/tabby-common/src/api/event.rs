@@ -77,7 +77,7 @@ pub enum Event {
     },
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Message {
     pub role: String,
     pub content: String,

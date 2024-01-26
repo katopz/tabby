@@ -4,7 +4,7 @@ use serde::{
   de::{self, Deserializer, Visitor},
   Deserialize, Serialize,
 };
-use tabby::chat::Message;
+use tabby_common::api::event::Message;
 
 use crate::core::chat::{TabbyChatViewData, TabbyClientViewData};
 

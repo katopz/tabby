@@ -47,9 +47,9 @@ pub struct ChatCompletionChunk {
     id: String,
     created: u64,
     system_fingerprint: String,
-    object: &'static str,
-    model: &'static str,
-    choices: [ChatCompletionChoice; 1],
+    object: String,
+    model: String,
+    pub choices: [ChatCompletionChoice; 1],
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
@@ -57,12 +57,12 @@ pub struct ChatCompletionChoice {
     index: usize,
     logprobs: Option<String>,
     finish_reason: Option<String>,
-    delta: ChatCompletionDelta,
+    pub delta: ChatCompletionDelta,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
 pub struct ChatCompletionDelta {
-    content: String,
+    pub content: String,
 }
 
 impl ChatCompletionChunk {
@@ -70,8 +70,8 @@ impl ChatCompletionChunk {
         ChatCompletionChunk {
             id,
             created,
-            object: "chat.completion.chunk",
-            model: "unused-model",
+            object: "chat.completion.chunk".to_owned(),
+            model: "unused-model".to_owned(),
             system_fingerprint: "unused-system-fingerprint".into(),
             choices: [ChatCompletionChoice {
                 index: 0,

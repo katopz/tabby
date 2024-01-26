@@ -8,6 +8,7 @@ use color_eyre::{eyre::Result, owo_colors::OwoColorize};
 use crossterm::event::{KeyCode, KeyEvent};
 use log::error;
 use ratatui::{prelude::*, widgets::*};
+use tabby_common::api::event::Message;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::trace;
 use tui_input::{backend::crossterm::EventHandler, Input};
@@ -22,7 +23,6 @@ use crate::{
     client::{EndPoint, TabbyClient},
   },
 };
-use tabby::serve::chat::Message;
 
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
 pub enum Mode {
@@ -116,8 +116,12 @@ impl Home {
   pub fn update_health_check_view(&mut self, health_view_data: TabbyClientViewData) {
     match health_view_data.health_state {
       Some(health_state) => {
-        let mut main_title =
-          format!("Tabby {} | {} | {}", health_state.version.git_describe, health_state.model, health_state.device);
+        let mut main_title = format!(
+          "Tabby {} | {} | {}",
+          health_state.version.git_describe,
+          health_state.model.unwrap_or("unknown".to_owned()),
+          health_state.device
+        );
 
         if health_state.cuda_devices.len() > 0 {
           main_title += " (";

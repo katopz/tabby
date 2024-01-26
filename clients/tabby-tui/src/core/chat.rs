@@ -1,7 +1,7 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use strum::EnumString;
 use strum_macros::Display;
-use tabby::serve::health::HealthState;
+use tabby::services::health::HealthState;
 
 #[derive(Debug, PartialEq, PartialOrd, EnumString, Serialize, Deserialize, Clone, Eq, Ord, Display)]
 pub enum ChatRole {
