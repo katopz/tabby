@@ -56,7 +56,7 @@ pub struct Home {
   pub messages: Vec<Message>,
 }
 
-const API_URL: &str = "http://192.168.1.33:9090";
+const API_URL: &str = "http://0.0.0.0:8080";
 
 impl Home {
   pub fn new() -> Self {
