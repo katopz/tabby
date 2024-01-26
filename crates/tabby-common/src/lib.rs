@@ -1,15 +1,19 @@
+//! Common tabby types and utilities.
+//! Defines common types and utilities used across multiple tabby subprojects, especially serialization and deserialization targets.
+pub mod api;
 pub mod config;
-pub mod events;
 pub mod index;
 pub mod languages;
 pub mod path;
 pub mod registry;
+pub mod terminal;
 pub mod usage;
 
 use std::{
     fs::File,
     io::{BufReader, Error},
     ops::Range,
+    path::PathBuf,
 };
 
 use path::dataset_dir;
@@ -29,9 +33,13 @@ pub struct SourceFile {
 }
 
 impl SourceFile {
+    pub fn files_jsonl() -> PathBuf {
+        dataset_dir().join("files.jsonl")
+    }
+
     pub fn all() -> Result<impl Iterator<Item = Self>, Error> {
-        let iter = dataset_dir().read_dir()?.flat_map(|path| {
-            let path = path.unwrap().path();
+        let files = glob::glob(format!("{}*", Self::files_jsonl().display()).as_str()).unwrap();
+        let iter = files.filter_map(|x| x.ok()).flat_map(|path| {
             let fp = BufReader::new(File::open(path).unwrap());
             let reader = JsonLinesReader::new(fp);
             reader.read_all::<SourceFile>().map(|x| x.unwrap())
@@ -40,13 +48,40 @@ impl SourceFile {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Point {
+    pub row: usize,
+    pub column: usize,
+}
+
+impl Point {
+    pub fn new(row: usize, column: usize) -> Self {
+        Self { row, column }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Tag {
     pub range: Range<usize>,
     pub name_range: Range<usize>,
+    pub utf16_column_range: Range<usize>,
+    pub span: Range<Point>,
     pub line_range: Range<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub docs: Option<String>,
     pub is_definition: bool,
     pub syntax_type_name: String,
+}
+
+#[derive(Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+pub struct Package {
+    pub language: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct DependencyFile {
+    pub direct: Vec<Package>,
 }

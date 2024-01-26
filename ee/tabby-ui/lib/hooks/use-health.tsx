@@ -1,12 +1,12 @@
 'use client'
 
-import useSWRImmutable from 'swr/immutable'
-import { SWRResponse } from 'swr'
-import fetcher from '@/lib/tabby-fetcher'
+import useSWR, { SWRResponse } from 'swr'
+
+import fetcher from '@/lib/tabby/fetcher'
 
 export interface HealthInfo {
   device: 'metal' | 'cpu' | 'cuda'
-  model: string
+  model?: string
   chat_model?: string
   cpu_info: string
   cpu_count: number
@@ -18,5 +18,5 @@ export interface HealthInfo {
 }
 
 export function useHealth(): SWRResponse<HealthInfo> {
-  return useSWRImmutable('/v1/health', fetcher)
+  return useSWR('/v1/health', fetcher)
 }

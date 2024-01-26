@@ -1,47 +1,41 @@
-#include "engine.h"
-
+#include <algorithm>
 #include <functional>
+#include <random>
 #include <vector>
+#include <cmath>
 #include <deque>
 #include <unordered_set>
+#include <mutex>
 
 #include <ggml.h>
 #include <llama.h>
 
+#include "llama-cpp-bindings/include/engine.h"
 #include "llama-cpp-bindings/src/lib.rs.h"
 
 namespace llama {
 TextInferenceEngine::~TextInferenceEngine() {}
 
 namespace {
-int get_parallelism() {
-  const char* parallelism = std::getenv("LLAMA_CPP_PARALLELISM");
-  if (parallelism) {
-    return std::stoi(parallelism);
-  } else {
-    return 4;
-  }
-}
-
-static size_t N_CONCURRENT_REQUESTS = get_parallelism();
-
 constexpr size_t N_BATCH = 512;  // # per batch inference.
 constexpr size_t N_CTX = 4096;   // # max kv history.
- 
 struct Request {
-  Request(size_t request_id, std::vector<llama_token> input_token_ids) :
+  Request(size_t request_id, std::vector<llama_token> input_token_ids, float temperature, uint64_t seed) :
     id(request_id),
-    tokens(input_token_ids.begin(), input_token_ids.end()) {
+    tokens(input_token_ids.begin(), input_token_ids.end()),
+    temperature(temperature),
+    seed(seed) {
     }
 
   uint32_t id = -1;
   llama_seq_id seq_id = -1;
+  float temperature = 0;
+  uint64_t seed = 0;
 
   std::vector<llama_token> tokens;
   size_t i_batch = -1;
   size_t n_past = 0;
 
-  int32_t multibyte_pending = 0;
   std::string generated_text;
 };
 
@@ -79,26 +73,72 @@ std::vector<llama_token> llama_tokenize(
     return result;
 }
 
+template<typename ... Args>
+std::string string_format(const std::string& format, Args ... args)
+{
+	int size_s = std::snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'
+	if (size_s <= 0) { throw std::runtime_error("Error during formatting."); }
+	auto size = static_cast<size_t>(size_s);
+	std::unique_ptr<char[]> buf(new char[size]);
+	std::snprintf(buf.get(), size, format.c_str(), args ...);
+	return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
+}
+
+float compute_softmax_inplace(float* nums, size_t len, float temperature) {
+  float sum = 0;
+  float max = *std::max_element(nums, nums + len);
+  for (size_t i = 0; i < len; i++) {
+    nums[i] -= max;
+    nums[i] = std::exp(nums[i] / temperature);
+    sum += nums[i];
+  }
+  for (size_t i = 0; i < len; i++) {
+      nums[i] /= sum;
+  }
+  return sum;
+}
+
+size_t weighted_random(const float* nums, size_t len, uint64_t seed) {
+  std::mt19937 rng(seed);
+  float sum = 0;
+  for (size_t i = 0; i < len; i++) {
+    sum += nums[i];
+  }
+
+  float random = std::uniform_real_distribution<float>(0, sum)(rng);
+  sum = 0;
+  size_t i;
+  for (i = 0; i < len; i++) {
+    sum += nums[i];
+    if (sum >= random) {
+      return i;
+    }
+  }
+  return i;
+}
+
 template<class T>
 using owned = std::unique_ptr<T, std::function<void(T*)>>;
 
 class TextInferenceEngineImpl : public TextInferenceEngine {
  public:
-  TextInferenceEngineImpl(owned<llama_model> model, owned<llama_context> ctx) :
+  TextInferenceEngineImpl(owned<llama_model> model, owned<llama_context> ctx, uint8_t parallelism) :
     model_(std::move(model)),
-    ctx_(std::move(ctx)) {
-      batch_ = llama_batch_init(N_CTX * N_CONCURRENT_REQUESTS, 0, 1);
+    ctx_(std::move(ctx)),
+    parallelism_(parallelism) {
+      batch_ = llama_batch_init(N_CTX * parallelism, 0, 1);
       // warm up
       {
-        for (int i = 0; i < 16; ++i) {
+        batch_.n_tokens = 16;
+        for (int i = 0; i < batch_.n_tokens; ++i) {
           batch_.token[i] = 0;
           batch_.pos[i] = i;
-          batch_.n_seq_id[0] = 1;
+          batch_.n_seq_id[i] = 1;
           batch_.seq_id[i][0] = 0;
           batch_.logits[i] = false;
         }
 
-        if (!llama_decode(ctx_.get(), batch_)) {
+        if (llama_decode(ctx_.get(), batch_)) {
           fprintf(stderr, "%s: warmup failed\n", __func__);
         }
 
@@ -110,13 +150,15 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
     llama_batch_free(batch_);
   }
 
-  virtual void add_request(uint32_t request_id, rust::Str text, size_t max_input_length) override {
+  virtual void add_request(uint32_t request_id, rust::Str text, size_t max_input_length,
+                           float temperature, uint64_t seed) override {
+
     auto tokens = llama_tokenize(llama_get_model(ctx_.get()), text, false, true);
     if (tokens.size() > max_input_length) {
       int start = tokens.size() - max_input_length;
       tokens = std::vector<llama_token>(tokens.begin() + start, tokens.end());
     }
-    pending_requests_.push_back(Request(request_id, tokens));
+    pending_requests_.push_back(Request(request_id, tokens, temperature, seed));
   }
 
   void stop_request(uint32_t request_id) override {
@@ -124,6 +166,8 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
   }
 
   rust::Vec<StepOutput> step() override {
+    std::lock_guard<std::mutex> guard(g_mutex_);
+
     auto* ctx = ctx_.get();
     auto n_vocab = llama_n_vocab(llama_get_model(ctx));
 
@@ -143,7 +187,7 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
     }
 
     // Add pending requests.
-    while (pending_requests_.size() > 0 && requests_.size() < N_CONCURRENT_REQUESTS) {
+    while (pending_requests_.size() > 0 && requests_.size() < parallelism_) {
       Request request = std::move(pending_requests_.front());
       pending_requests_.pop_front();
 
@@ -201,7 +245,7 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
 
       const int ret = llama_decode(ctx, batch_view);
       if (ret != 0) {
-        throw std::runtime_error("Failed to eval");
+        throw std::runtime_error(string_format("llama_decode failed with code: %d", ret));
       }
 
       const auto eos_id = llama_token_eos(llama_get_model(ctx));
@@ -211,9 +255,9 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
         }
 
         int32_t i_batch = request.i_batch - i;
-        auto logits = llama_get_logits_ith(ctx, i_batch);
-        auto next_token = std::distance(logits, std::max_element(logits, logits + n_vocab));
-
+        float* logits = llama_get_logits_ith(ctx, i_batch);
+        compute_softmax_inplace(logits, n_vocab, request.temperature);
+        auto next_token = weighted_random(logits, n_vocab, request.seed);
         request.n_past += request.tokens.size();
 
         request.tokens.clear();
@@ -225,27 +269,35 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
         // FIXME: Hack for codellama to simplify tabby's implementation.
         const bool is_eos = next_token == eos_id || token_str == " <EOT>";
 
-        if (request.multibyte_pending > 0) {
-          request.multibyte_pending -= token_str.size();
-        } else if (token_str.size() == 1) {
-          const char c = token_str[0];
-          // 2-byte characters: 110xxxxx 10xxxxxx
-          if ((c & 0xE0) == 0xC0) {
-            request.multibyte_pending = 1;
-            // 3-byte characters: 1110xxxx 10xxxxxx 10xxxxxx
-          }
-          else if ((c & 0xF0) == 0xE0) {
-            request.multibyte_pending = 2;
-            // 4-byte characters: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-          } else if ((c & 0xF8) == 0xF0) {
-            request.multibyte_pending = 3;
-          }
-          else {
-            request.multibyte_pending = 0;
-          }
+        bool incomplete = false;
+        for (size_t i = 1; i < 5 && i <= request.generated_text.size(); ++i)
+        {
+            const char c = request.generated_text[request.generated_text.size() - i];
+            if ((c & 0xC0) == 0x80)
+            {
+                // continuation byte: 10xxxxxx
+                continue;
+            }
+            else if ((c & 0xE0) == 0xC0)
+            {
+                // 2-byte character: 110xxxxx ...
+                incomplete = i < 2;
+            }
+            else if ((c & 0xF0) == 0xE0)
+            {
+                // 3-byte character: 1110xxxx ...
+                incomplete = i < 3;
+            }
+            else if ((c & 0xF8) == 0xF0)
+            {
+                // 4-byte character: 11110xxx ...
+                incomplete = i < 4;
+            }
+            // else 1-byte character or invalid byte
+            break;
         }
 
-        if (request.multibyte_pending == 0) {
+        if (!incomplete) {
           rust::String generated_text;
           try {
             generated_text = is_eos ? "" : request.generated_text;
@@ -271,7 +323,16 @@ class TextInferenceEngineImpl : public TextInferenceEngine {
   std::vector<Request> requests_;
   std::deque<Request> pending_requests_;
   std::unordered_set<uint32_t> stopped_requests_;
+
+  uint32_t parallelism_;
+
+  // llama.cpp is not thread safe
+  // FIXME(meng): remove the mutex once https://github.com/ggerganov/llama.cpp/issues/3960 is fixed
+  // and integrated to tabby's fork.
+  static std::mutex g_mutex_;
 };
+
+std::mutex TextInferenceEngineImpl::g_mutex_;
 
 static int g_llama_cpp_log_level = 0;
 static void llama_log_callback(ggml_log_level level, const char * text, void * user_data) {
@@ -298,7 +359,7 @@ struct BackendInitializer {
 
 } // namespace
 
-std::unique_ptr<TextInferenceEngine> create_engine(bool use_gpu, rust::Str model_path) {
+std::unique_ptr<TextInferenceEngine> create_engine(bool use_gpu, rust::Str model_path, uint8_t parallelism) {
   static BackendInitializer initializer;
 
   llama_model_params model_params = llama_model_default_params();
@@ -310,13 +371,18 @@ std::unique_ptr<TextInferenceEngine> create_engine(bool use_gpu, rust::Str model
   }
 
   llama_context_params ctx_params = llama_context_default_params();
-  ctx_params.n_ctx = N_CTX;
+  ctx_params.n_ctx = N_CTX * parallelism;
   ctx_params.n_batch = N_BATCH;
+  if (const char* n_thread_str = std::getenv("LLAMA_CPP_N_THREADS")) {
+    int n_threads = std::stoi(n_thread_str);
+    ctx_params.n_threads = n_threads;
+    ctx_params.n_threads_batch = n_threads;
+  }
   llama_context* ctx = llama_new_context_with_model(model, ctx_params);
-
   return std::make_unique<TextInferenceEngineImpl>(
       owned<llama_model>(model, llama_free_model),
-      owned<llama_context>(ctx, llama_free)
+      owned<llama_context>(ctx, llama_free),
+      parallelism
   );
 }
 

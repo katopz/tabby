@@ -1,125 +1,105 @@
 'use client'
 
-import { buttonVariants } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from '@/components/ui/dialog'
-import { IconSlack } from '@/components/ui/icons'
-import { Separator } from '@/components/ui/separator'
-import { useHealth } from '@/lib/hooks/use-health'
-import { PropsWithChildren, useEffect, useState } from 'react'
-import WorkerCard from './components/worker-card'
+import { useEffect, useState } from 'react'
+import { noop } from 'lodash-es'
+import { useQuery } from 'urql'
 
-const COMMUNITY_DIALOG_SHOWN_KEY = 'community-dialog-shown'
+import { graphql } from '@/lib/gql/generates'
+import { useHealth } from '@/lib/hooks/use-health'
+import { useMutation } from '@/lib/tabby/gql'
+import { Button } from '@/components/ui/button'
+import {
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card'
+import { IconRotate } from '@/components/ui/icons'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { CopyButton } from '@/components/copy-button'
+import SlackDialog from '@/components/slack-dialog'
 
 export default function Home() {
-  const [open, setOpen] = useState(false)
-  useEffect(() => {
-    if (!localStorage.getItem(COMMUNITY_DIALOG_SHOWN_KEY)) {
-      setOpen(true)
-      localStorage.setItem(COMMUNITY_DIALOG_SHOWN_KEY, 'true')
-    }
-  }, [])
-
   return (
-    <div className="p-4 lg:p-16">
+    <div>
       <MainPanel />
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader className="gap-3">
-            <DialogTitle>Join the Tabby community</DialogTitle>
-            <DialogDescription>
-              Connect with other contributors building Tabby. Share knowledge,
-              get help, and contribute to the open-source project.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="sm:justify-start">
-            <a
-              target="_blank"
-              href="https://join.slack.com/t/tabbycommunity/shared_invite/zt-1xeiddizp-bciR2RtFTaJ37RBxr8VxpA"
-              className={buttonVariants()}
-            >
-              <IconSlack className="-ml-2 h-8 w-8" />
-              Join us on Slack
-            </a>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SlackDialog />
     </div>
   )
 }
 
-interface LinkProps {
-  href: string
-}
+const meQuery = graphql(/* GraphQL */ `
+  query MeQuery {
+    me {
+      authToken
+    }
+  }
+`)
 
-function Link({ href, children }: PropsWithChildren<LinkProps>) {
-  return (
-    <a target="_blank" href={href} className="underline">
-      {children}
-    </a>
-  )
-}
-
-function toBadgeString(str: string) {
-  return encodeURIComponent(str.replaceAll('-', '--'))
-}
+const resetUserAuthTokenDocument = graphql(/* GraphQL */ `
+  mutation ResetUserAuthToken {
+    resetUserAuthToken
+  }
+`)
 
 function MainPanel() {
   const { data: healthInfo } = useHealth()
+  const [{ data }, reexecuteQuery] = useQuery({ query: meQuery })
+  const [origin, setOrigin] = useState('')
+  useEffect(() => {
+    setOrigin(new URL(window.location.href).origin)
+  }, [])
 
-  if (!healthInfo) return
+  const resetUserAuthToken = useMutation(resetUserAuthTokenDocument, {
+    onCompleted: () => reexecuteQuery()
+  })
+
+  if (!healthInfo || !data) return
 
   return (
-    <div className="flex w-full flex-col gap-3">
-      <h1>
-        <span className="font-bold">Congratulations</span>, your tabby instance
-        is up!
-      </h1>
-      <span className="flex flex-wrap gap-1">
-        <a
-          target="_blank"
-          href={`https://github.com/TabbyML/tabby/releases/tag/${healthInfo.version.git_describe}`}
-        >
-          <img
-            src={`https://img.shields.io/badge/version-${toBadgeString(
-              healthInfo.version.git_describe
-            )}-green`}
-          />
-        </a>
-      </span>
-      <Separator />
+    <div>
+      <CardHeader>
+        <CardTitle>Getting Started</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <Label>Endpoint URL</Label>
+        <span className="flex items-center gap-1">
+          <Input value={origin} onChange={noop} className="max-w-[320px]" />
+          <CopyButton value={origin} />
+        </span>
 
-      <div className="mt-4 rounded-lg bg-zinc-100 p-4 dark:bg-zinc-800">
-        <span className="font-bold">Workers</span>
-        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:flex-wrap">
-          <WorkerCard
-            source="localhost"
-            name={healthInfo.model}
-            type="completion"
-            health={healthInfo}
+        <Label>Token</Label>
+        <span className="flex items-center gap-1">
+          <Input
+            className="max-w-[320px] font-mono text-red-600"
+            value={data.me.authToken}
+            onChange={noop}
           />
-          {healthInfo.chat_model && (
-            <WorkerCard
-              source="localhost"
-              name={healthInfo.chat_model}
-              type="chat"
-              health={healthInfo}
-            />
-          )}
-          <WorkerCard
-            source="localhost"
-            name="Code Search Index"
-            type="index"
-            health={healthInfo}
-          />
-        </div>
-      </div>
+          <Button
+            title="Rotate"
+            size="icon"
+            variant="hover-destructive"
+            onClick={() => resetUserAuthToken()}
+          >
+            <IconRotate />
+          </Button>
+          <CopyButton value={data.me.authToken} />
+        </span>
+      </CardContent>
+      <CardFooter>
+        <span>
+          Use informations above for IDE extensions / plugins configuration, see{' '}
+          <a
+            className="underline"
+            target="_blank"
+            href="https://tabby.tabbyml.com/docs/extensions/configurations#server"
+          >
+            documentation website
+          </a>{' '}
+          for details
+        </span>
+      </CardFooter>
     </div>
   )
 }

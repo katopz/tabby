@@ -1,34 +1,14 @@
 use std::path::PathBuf;
 
-use assert_json_diff::assert_json_include;
 use lazy_static::lazy_static;
-use serde::Deserialize;
 use serde_json::json;
+use serial_test::serial;
 use tokio::{
     process::Command,
     time::{sleep, Duration},
 };
 
 lazy_static! {
-    static ref SERVER: bool = {
-        let mut cmd = Command::new(tabby_path());
-        cmd.arg("serve")
-            .arg("--model")
-            .arg("TabbyML/StarCoder-1B")
-            .arg("--port")
-            .arg("9090")
-            .arg("--device")
-            .arg("metal")
-            .kill_on_drop(true);
-        tokio::task::spawn(async move {
-            cmd.spawn()
-                .expect("Failed to start server")
-                .wait()
-                .await
-                .unwrap();
-        });
-        true
-    };
     static ref CLIENT: reqwest::Client = reqwest::Client::new();
 }
 
@@ -48,12 +28,30 @@ fn tabby_path() -> PathBuf {
     workspace_dir().join("target/debug/tabby")
 }
 
-fn golden_path() -> PathBuf {
-    workspace_dir().join("crates/tabby/tests/golden.json")
+fn initialize_server(gpu_device: Option<&str>) {
+    let mut cmd = Command::new(tabby_path());
+    cmd.arg("serve")
+        .arg("--model")
+        .arg("TabbyML/StarCoder-1B")
+        .arg("--port")
+        .arg("9090")
+        .kill_on_drop(true);
+
+    if let Some(gpu_device) = gpu_device {
+        cmd.arg("--device").arg(gpu_device);
+    }
+
+    tokio::task::spawn(async move {
+        cmd.spawn()
+            .expect("Failed to start server")
+            .wait()
+            .await
+            .unwrap();
+    });
 }
 
-async fn wait_for_server() {
-    lazy_static::initialize(&SERVER);
+async fn wait_for_server(device: Option<&str>) {
+    initialize_server(device);
 
     loop {
         println!("Waiting for server to start...");
@@ -68,7 +66,7 @@ async fn wait_for_server() {
     }
 }
 
-async fn golden_test(body: serde_json::Value, expected: serde_json::Value) {
+async fn golden_test(body: serde_json::Value) -> serde_json::Value {
     let mut body = body.clone();
     body.as_object_mut().unwrap().insert(
         "debug_options".to_owned(),
@@ -86,21 +84,59 @@ async fn golden_test(body: serde_json::Value, expected: serde_json::Value) {
         .json()
         .await
         .unwrap();
-    assert_json_include!(actual: actual, expected: expected);
+    actual
 }
 
-#[derive(Deserialize)]
-struct TestCase {
-    request: serde_json::Value,
-    expected: serde_json::Value,
+macro_rules! assert_golden {
+    ($expr:expr) => {
+        insta::assert_yaml_snapshot!(golden_test($expr).await, {
+            ".id" => "test-id"
+        });
+    }
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[tokio::test]
+#[serial]
+async fn run_golden_tests() {
+    wait_for_server(Some("metal")).await;
+
+    assert_golden!(json!({
+            "language": "python",
+            "seed": 0,
+            "segments": {
+                "prefix": "def fib(n):\n    ",
+                "suffix": "\n        return fib(n - 1) + fib(n - 2)"
+            }
+    }));
+
+    assert_golden!(json!({
+            "language": "python",
+            "seed": 0,
+            "segments": {
+                "prefix": "import datetime\n\ndef parse_expenses(expenses_string):\n    \"\"\"Parse the list of expenses and return the list of triples (date, value, currency).\n    Ignore lines starting with #.\n    Parse the date using datetime.\n    Example expenses_string:\n        2016-01-02 -34.01 USD\n        2016-01-03 2.59 DKK\n        2016-01-03 -2.72 EUR\n    \"\"\"\n    for line in expenses_string.split('\\n'):\n        "
+            }
+    }));
 }
 
 #[tokio::test]
-async fn run_golden_tests() {
-    wait_for_server().await;
+#[serial]
+async fn run_golden_tests_cpu() {
+    wait_for_server(Some("cpu")).await;
 
-    let cases: Vec<TestCase> = serdeconv::from_json_file(golden_path()).unwrap();
-    for case in cases {
-        golden_test(case.request, case.expected).await;
-    }
+    assert_golden!(json!({
+            "language": "python",
+            "seed": 0,
+            "segments": {
+                "prefix": "def is_prime(n):\n",
+            }
+    }));
+
+    assert_golden!(json!({
+            "language": "python",
+            "seed": 0,
+            "segments": {
+                "prefix": "def char_frequencies(str):\n  freqs = {}\n  ",
+            }
+    }));
 }

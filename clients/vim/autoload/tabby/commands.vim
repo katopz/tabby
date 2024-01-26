@@ -15,8 +15,8 @@ function! s:commands.status(...)
   call tabby#Status()
 endfunction
 
-function! s:commands.auth(...)
-  call tabby#Auth()
+function! s:commands.version(...)
+  echo g:tabby_version
 endfunction
 
 function! s:commands.help(...)

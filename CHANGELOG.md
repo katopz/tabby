@@ -1,8 +1,51 @@
-# v0.6.0 [Unreleased]
+# v0.8.0 [Unreleased]
+
+## Notice
+
+* Due to format changes, re-executing `tabby scheduler --now` is required to ensure that `Code Browser` functions properly.
 
 ## Features
 
-# v0.5.0
+* Introducing a preview release of the `Source Code Browser`, featuring visualization of code snippets utilized for code completion in RAG.
+
+## Fixes and Improvements
+
+* Added a Windows CPU binary distribution.
+* Added a Linux ROCm (AMD GPU) binary distribution.
+* Fixed an issue with cached permanent redirection in certain browsers (e.g., Chrome) when the `--webserver` flag is disabled.
+* Introduced the `TABBY_MODEL_CACHE_ROOT` environment variable to individually override the model cache directory.
+* The `/v1beta/chat/completions` API endpoint is now compatible with OpenAI's chat completion API.
+
+# v0.7.0 (12/15/2023)
+
+## Features
+
+* Tabby now includes built-in user management and secure access, ensuring that it is only accessible to your team.
+* The `--webserver` flag is a new addition to `tabby serve` that enables secure access to the tabby server. When this flag is on, IDE extensions will need to provide an authorization token to access the instance.
+  - Some functionalities that are bound to the webserver (e.g. playground) will also require the `--webserver` flag.
+
+
+## Fixes and Improvements
+
+*  Fix https://github.com/TabbyML/tabby/issues/1036, events log should be written to dated json files.
+
+# v0.6.0 (11/27/2023)
+
+## Features
+
+* Add distribution support (running completion / chat model on different process / machine).
+* Add conversation history in chat playground.
+* Add `/metrics` endpoint for prometheus metrics collection. 
+
+## Fixes and Improvements
+
+* Fix the slow repository indexing due to constraint memory arena in tantivy index writer.
+* Make `--model` optional, so users can create a chat only instance.
+* Add `--parallelism` to control the throughput and VRAM usage: https://github.com/TabbyML/tabby/pull/727
+
+# v0.5.5 (11/09/2023)
+
+## Fixes and Improvements
 
 ## Notice
 
@@ -20,8 +63,9 @@
 * add `server.completion_timeout` to control the code completion interface timeout: https://github.com/TabbyML/tabby/pull/637
 * Cuda backend is switched to llama.cpp: https://github.com/TabbyML/tabby/pull/656
 * Tokenizer implementation is switched to llama.cpp, so tabby no longer need to download additional tokenizer file: https://github.com/TabbyML/tabby/pull/683
+* Fix deadlock issue reported in https://github.com/TabbyML/tabby/issues/718
 
-# v0.4.0
+# v0.4.0 (10/24/2023)
 
 ## Features
 
@@ -34,13 +78,13 @@
 
 * Improve snippets retrieval by dedup candidates to existing content + snippets: https://github.com/TabbyML/tabby/pull/582
 
-# v0.3.1
+# v0.3.1 (10/21/2023)
 ## Fixes and improvements
 
 * Fix GPU OOM issue caused the parallelism: https://github.com/TabbyML/tabby/issues/541, https://github.com/TabbyML/tabby/issues/587
 * Fix git safe directory check in docker: https://github.com/TabbyML/tabby/issues/569
 
-# v0.3.0
+# v0.3.0 (10/13/2023)
 
 ## Features
 ### Retrieval-Augmented Code Completion Enabled by Default

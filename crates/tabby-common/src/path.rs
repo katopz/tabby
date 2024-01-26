@@ -6,9 +6,11 @@ lazy_static! {
     static ref TABBY_ROOT: Mutex<Cell<PathBuf>> = {
         Mutex::new(Cell::new(match env::var("TABBY_ROOT") {
             Ok(x) => PathBuf::from(x),
-            Err(_) => PathBuf::from(env::var("HOME").unwrap()).join(".tabby"),
+            Err(_) => home::home_dir().unwrap().join(".tabby"),
         }))
     };
+    static ref TABBY_MODEL_CACHE_ROOT: Option<PathBuf> =
+        env::var("TABBY_MODEL_CACHE_ROOT").ok().map(PathBuf::from);
 }
 
 #[cfg(feature = "testutils")]
@@ -18,7 +20,7 @@ pub fn set_tabby_root(path: PathBuf) {
     cell.replace(path);
 }
 
-fn tabby_root() -> PathBuf {
+pub fn tabby_root() -> PathBuf {
     let mut cell = TABBY_ROOT.lock().unwrap();
     cell.get_mut().clone()
 }
@@ -35,6 +37,10 @@ pub fn repositories_dir() -> PathBuf {
     tabby_root().join("repositories")
 }
 
+pub fn dependency_file() -> PathBuf {
+    dataset_dir().join("deps.json")
+}
+
 pub fn index_dir() -> PathBuf {
     tabby_root().join("index")
 }
@@ -44,7 +50,11 @@ pub fn dataset_dir() -> PathBuf {
 }
 
 pub fn models_dir() -> PathBuf {
-    tabby_root().join("models")
+    if let Some(cache_root) = &*TABBY_MODEL_CACHE_ROOT {
+        cache_root.clone()
+    } else {
+        tabby_root().join("models")
+    }
 }
 
 pub fn events_dir() -> PathBuf {

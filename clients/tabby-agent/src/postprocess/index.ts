@@ -1,23 +1,28 @@
-import { CompletionContext, CompletionResponse } from "../Agent";
+import { CompletionContext, CompletionResponse } from "../CompletionContext";
 import { AgentConfig } from "../AgentConfig";
-import { applyFilter } from "./base";
+import { applyFilter, applyChoiceFilter } from "./base";
 import { removeRepetitiveBlocks } from "./removeRepetitiveBlocks";
 import { removeRepetitiveLines } from "./removeRepetitiveLines";
 import { removeLineEndsWithRepetition } from "./removeLineEndsWithRepetition";
-import { limitScopeByIndentation } from "./limitScopeByIndentation";
+import { removeDuplicatedBlockClosingLine } from "./removeDuplicatedBlockClosingLine";
+import { limitScope } from "./limitScope";
+import { formatIndentation } from "./formatIndentation";
 import { trimSpace } from "./trimSpace";
+import { trimMultiLineInSingleLineMode } from "./trimMultiLineInSingleLineMode";
 import { dropDuplicated } from "./dropDuplicated";
 import { dropBlank } from "./dropBlank";
+import { calculateReplaceRange } from "./calculateReplaceRange";
 
 export async function preCacheProcess(
   context: CompletionContext,
-  config: AgentConfig["postprocess"],
+  _: AgentConfig["postprocess"],
   response: CompletionResponse,
 ): Promise<CompletionResponse> {
   return Promise.resolve(response)
-    .then(applyFilter(removeLineEndsWithRepetition(context), context))
-    .then(applyFilter(dropDuplicated(context), context))
-    .then(applyFilter(trimSpace(context), context))
+    .then(applyFilter(trimMultiLineInSingleLineMode(), context))
+    .then(applyFilter(removeLineEndsWithRepetition(), context))
+    .then(applyFilter(dropDuplicated(), context))
+    .then(applyFilter(trimSpace(), context))
     .then(applyFilter(dropBlank(), context));
 }
 
@@ -27,10 +32,13 @@ export async function postCacheProcess(
   response: CompletionResponse,
 ): Promise<CompletionResponse> {
   return Promise.resolve(response)
-    .then(applyFilter(removeRepetitiveBlocks(context), context))
-    .then(applyFilter(removeRepetitiveLines(context), context))
-    .then(applyFilter(limitScopeByIndentation(context, config["limitScopeByIndentation"]), context))
-    .then(applyFilter(dropDuplicated(context), context))
-    .then(applyFilter(trimSpace(context), context))
-    .then(applyFilter(dropBlank(), context));
+    .then(applyFilter(removeRepetitiveBlocks(), context))
+    .then(applyFilter(removeRepetitiveLines(), context))
+    .then(applyFilter(limitScope(config["limitScope"]), context))
+    .then(applyFilter(removeDuplicatedBlockClosingLine(), context))
+    .then(applyFilter(formatIndentation(), context))
+    .then(applyFilter(dropDuplicated(), context))
+    .then(applyFilter(trimSpace(), context))
+    .then(applyFilter(dropBlank(), context))
+    .then(applyChoiceFilter(calculateReplaceRange(config["calculateReplaceRange"]), context));
 }

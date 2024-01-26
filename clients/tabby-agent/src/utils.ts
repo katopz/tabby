@@ -1,6 +1,6 @@
 export function splitLines(input: string) {
-  const lines = input.match(/.*(?:$|\r?\n)/g).filter(Boolean); // Split lines and keep newline character
-  if (lines.length > 0 && lines[lines.length - 1].endsWith("\n")) {
+  const lines = input.match(/.*(?:$|\r?\n)/g)?.filter(Boolean) ?? []; // Split lines and keep newline character
+  if (lines.length > 0 && lines[lines.length - 1]?.endsWith("\n")) {
     // Keep last empty line
     lines.push("");
   }
@@ -8,12 +8,46 @@ export function splitLines(input: string) {
 }
 
 export function splitWords(input: string) {
-  return input.match(/\w+|\W+/g).filter(Boolean); // Split consecutive words and non-words
+  return input.match(/\w+|\W+/g)?.filter(Boolean) ?? []; // Split consecutive words and non-words
 }
 
 export function isBlank(input: string) {
   return input.trim().length === 0;
 }
+
+// Indentation
+
+export function getIndentationLevel(line: string, indentation?: string) {
+  if (indentation === undefined) {
+    return line.match(/^[ \t]*/)?.[0]?.length ?? 0;
+  } else if (indentation === "\t") {
+    return line.match(/^\t*/g)?.[0].length ?? 0;
+  } else if (indentation.match(/^ *$/)) {
+    const spaces = line.match(/^ */)?.[0].length ?? 0;
+    return spaces / indentation.length;
+  } else {
+    throw new Error(`Invalid indentation: ${indentation}`);
+  }
+}
+
+// function foo(a) {  // <-- block opening line
+//   return a;
+// }                  // <-- block closing line
+export function isBlockOpeningLine(lines: string[], index: number): boolean {
+  if (index < 0 || index >= lines.length - 1) {
+    return false;
+  }
+  return getIndentationLevel(lines[index]!) < getIndentationLevel(lines[index + 1]!);
+}
+
+export function isBlockClosingLine(lines: string[], index: number): boolean {
+  if (index <= 0 || index > lines.length - 1) {
+    return false;
+  }
+  return getIndentationLevel(lines[index - 1]!) > getIndentationLevel(lines[index]!);
+}
+
+// Auto-closing chars
 
 export const autoClosingPairs = [
   ["(", ")"],
@@ -70,7 +104,7 @@ export function calcDistance(a: string, b: string) {
 }
 
 // Polyfill for AbortSignal.any(signals) which added in Node.js v20.
-export function abortSignalFromAnyOf(signals: AbortSignal[]) {
+export function abortSignalFromAnyOf(signals: (AbortSignal | undefined)[]) {
   const controller = new AbortController();
   for (const signal of signals) {
     if (signal?.aborted) {
@@ -86,9 +120,9 @@ export function abortSignalFromAnyOf(signals: AbortSignal[]) {
 
 // Http Error
 export class HttpError extends Error {
-  status: number;
-  statusText: string;
-  response: Response;
+  public readonly status: number;
+  public readonly statusText: string;
+  public readonly response: Response;
 
   constructor(response: Response) {
     super(`${response.status} ${response.statusText}`);
@@ -102,10 +136,18 @@ export class HttpError extends Error {
 export function isTimeoutError(error: any) {
   return (
     (error instanceof Error && error.name === "TimeoutError") ||
-    (error instanceof HttpError && [408, 499].indexOf(error.status) !== -1)
+    (error instanceof HttpError && [408, 499].includes(error.status))
   );
 }
 
 export function isCanceledError(error: any) {
   return error instanceof Error && error.name === "AbortError";
+}
+
+export function errorToString(error: Error & { cause?: Error }) {
+  let message = error.message || error.toString();
+  if (error.cause) {
+    message += "\nCaused by: " + errorToString(error.cause);
+  }
+  return message;
 }

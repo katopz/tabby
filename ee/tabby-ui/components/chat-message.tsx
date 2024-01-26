@@ -1,22 +1,29 @@
 // Inspired by Chatbot-UI and modified to fit the needs of this project
 // @see https://github.com/mckaywrigley/chatbot-ui/blob/main/components/Chat/ChatMessage.tsx
 
+import Image from 'next/image'
+import tabbyLogo from '@/assets/tabby.png'
 import { Message } from 'ai'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
+import { MessageActionType } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { CodeBlock } from '@/components/ui/codeblock'
-import { MemoizedReactMarkdown } from '@/components/markdown'
 import { IconUser } from '@/components/ui/icons'
-import Image from 'next/image'
 import { ChatMessageActions } from '@/components/chat-message-actions'
+import { MemoizedReactMarkdown } from '@/components/markdown'
 
 export interface ChatMessageProps {
   message: Message
+  handleMessageAction: (messageId: string, action: MessageActionType) => void
 }
 
-export function ChatMessage({ message, ...props }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  handleMessageAction,
+  ...props
+}: ChatMessageProps) {
   return (
     <div
       className={cn('group relative mb-4 flex items-start md:-ml-12')}
@@ -24,10 +31,10 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
     >
       <div
         className={cn(
-          'flex h-8 w-8 shrink-0 select-none items-center justify-center rounded-md border shadow',
+          'flex h-8 w-8 shrink-0 select-none items-center justify-center rounded-md border bg-background shadow',
           message.role === 'user'
             ? 'bg-background'
-            : 'bg-primary text-primary-foreground'
+            : 'bg-accent text-accent-foreground'
         )}
       >
         {message.role === 'user' ? <IconUser /> : <IconTabby />}
@@ -74,7 +81,10 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
         >
           {message.content}
         </MemoizedReactMarkdown>
-        <ChatMessageActions message={message} />
+        <ChatMessageActions
+          message={message}
+          handleMessageAction={handleMessageAction}
+        />
       </div>
     </div>
   )
@@ -84,7 +94,7 @@ function IconTabby() {
   return (
     <Image
       style={{ borderRadius: 4 }}
-      src="https://avatars.githubusercontent.com/u/125617854?s=128&v=4"
+      src={tabbyLogo}
       alt="tabby"
       width="128"
       height="128"

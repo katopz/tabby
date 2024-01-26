@@ -1,8 +1,9 @@
 import type { components as ApiComponents } from "./types/tabbyApi";
-import { AgentConfig, PartialAgentConfig } from "./AgentConfig";
-import { CompletionRequest, CompletionResponse, CompletionContext } from "./CompletionContext";
+import type { AgentConfig, PartialAgentConfig } from "./AgentConfig";
+import type { DataStore } from "./dataStore";
+import type { CompletionRequest, CompletionResponse } from "./CompletionContext";
 
-export { CompletionRequest, CompletionResponse, CompletionContext };
+export type { CompletionRequest, CompletionResponse };
 
 export type ClientProperties = Partial<{
   user: Record<string, any>;
@@ -12,6 +13,7 @@ export type ClientProperties = Partial<{
 export type AgentInitOptions = Partial<{
   config: PartialAgentConfig;
   clientProperties: ClientProperties;
+  dataStore: DataStore;
 }>;
 
 export type ServerHealthState = ApiComponents["schemas"]["HealthState"];
@@ -30,7 +32,11 @@ export type HighCompletionTimeoutRateIssue = {
   name: "highCompletionTimeoutRate";
   completionResponseStats: Record<string, number>;
 };
-export type AgentIssue = SlowCompletionResponseTimeIssue | HighCompletionTimeoutRateIssue;
+export type ConnectionFailedIssue = {
+  name: "connectionFailed";
+  message?: string;
+};
+export type AgentIssue = SlowCompletionResponseTimeIssue | HighCompletionTimeoutRateIssue | ConnectionFailedIssue;
 
 /**
  * Represents the status of the agent.
@@ -38,10 +44,7 @@ export type AgentIssue = SlowCompletionResponseTimeIssue | HighCompletionTimeout
  * @property {string} notInitialized - When the agent has not been initialized.
  * @property {string} ready - When the agent gets a valid response from the server.
  * @property {string} disconnected - When the agent fails to connect to the server.
- * @property {string} unauthorized - When the server is set to a Tabby Cloud endpoint that requires auth,
- *   and no `Authorization` request header is provided in the agent config,
- *   and the user has not completed the auth flow or the auth token is expired.
- *   See also `requestAuthUrl` and `waitForAuthToken`.
+ * @property {string} unauthorized - When the server requires authentication.
  * @property {string} finalized - When the agent is finalized.
  */
 export type AgentStatus = "notInitialized" | "ready" | "disconnected" | "unauthorized" | "finalized";
@@ -95,14 +98,14 @@ export interface AgentFunction {
   /**
    * @returns the current issues if any exists
    */
-  getIssues(detail?: boolean): AgentIssue["name"][];
+  getIssues(): AgentIssue["name"][];
 
   /**
    * Get the detail of an issue by index or name.
    * @param options if `index` is provided, `name` will be ignored
    * @returns the issue detail if exists, otherwise null
    */
-  getIssueDetail(options: { index?: number; name?: AgentIssue["name"] }): AgentIssue | null;
+  getIssueDetail<T extends AgentIssue>(options: { index?: number; name?: T["name"] }): T | null;
 
   /**
    * @returns server info returned from latest server health check, returns null if not available
@@ -110,6 +113,8 @@ export interface AgentFunction {
   getServerHealthState(): ServerHealthState | null;
 
   /**
+   * @deprecated Tabby Cloud auth
+   *
    * Request auth url for Tabby Cloud endpoint. Only return value when the `AgentStatus` is `unauthorized`.
    * Otherwise, return null. See also `AgentStatus`.
    * @returns the auth url for redirecting, and the code for next step `waitingForAuth`
@@ -118,6 +123,8 @@ export interface AgentFunction {
   requestAuthUrl(options?: AbortSignalOption): Promise<{ authUrl: string; code: string } | null>;
 
   /**
+   * @deprecated Tabby Cloud auth
+   *
    * Wait for auth token to be ready after redirecting user to auth url,
    * returns nothing, but `AgentStatus` will change to `ready` if resolved successfully.
    * @param code from `requestAuthUrl`
@@ -152,8 +159,7 @@ export type ConfigUpdatedEvent = {
   config: AgentConfig;
 };
 /**
- * This event is emitted when the server is set to a Tabby Cloud endpoint that requires auth,
- * and no `Authorization` request header is provided in the agent config.
+ * This event is emitted when the server requires authentication.
  */
 export type AuthRequiredEvent = {
   event: "authRequired";

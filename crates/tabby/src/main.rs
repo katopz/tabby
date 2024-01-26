@@ -1,5 +1,12 @@
+//! Core tabby functionality. Defines primary API and CLI behavior.
+mod routes;
+mod services;
+
 mod download;
 mod serve;
+
+#[cfg(feature = "ee")]
+mod worker;
 
 use clap::{Parser, Subcommand};
 use opentelemetry::{
@@ -34,6 +41,26 @@ pub enum Commands {
 
     /// Run scheduler progress for cron jobs integrating external code repositories.
     Scheduler(SchedulerArgs),
+
+    /// Run completion model as worker
+    #[cfg(feature = "ee")]
+    #[clap(name = "worker::completion")]
+    WorkerCompletion(worker::WorkerArgs),
+
+    /// Run chat model as worker
+    #[cfg(feature = "ee")]
+    #[clap(name = "worker::chat")]
+    WorkerChat(worker::WorkerArgs),
+
+    /// Execute the repository sync job.
+    #[cfg(feature = "ee")]
+    #[clap(name = "job::sync")]
+    JobSync,
+
+    /// Execute the index job.
+    #[cfg(feature = "ee")]
+    #[clap(name = "job::index")]
+    JobIndex,
 }
 
 #[derive(clap::Args)]
@@ -43,19 +70,79 @@ pub struct SchedulerArgs {
     now: bool,
 }
 
+#[derive(clap::ValueEnum, strum::Display, PartialEq, Clone)]
+pub enum Device {
+    #[strum(serialize = "cpu")]
+    Cpu,
+
+    #[cfg(feature = "cuda")]
+    #[strum(serialize = "cuda")]
+    Cuda,
+
+    #[cfg(feature = "rocm")]
+    #[strum(serialize = "rocm")]
+    Rocm,
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[strum(serialize = "metal")]
+    Metal,
+
+    #[cfg(feature = "experimental-http")]
+    #[strum(serialize = "experimental_http")]
+    ExperimentalHttp,
+}
+
+impl Device {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    pub fn ggml_use_gpu(&self) -> bool {
+        *self == Device::Metal
+    }
+
+    #[cfg(feature = "cuda")]
+    pub fn ggml_use_gpu(&self) -> bool {
+        *self == Device::Cuda
+    }
+
+    #[cfg(feature = "rocm")]
+    pub fn ggml_use_gpu(&self) -> bool {
+        *self == Device::Rocm
+    }
+
+    #[cfg(not(any(
+        all(target_os = "macos", target_arch = "aarch64"),
+        feature = "cuda",
+        feature = "rocm",
+    )))]
+    pub fn ggml_use_gpu(&self) -> bool {
+        false
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
     init_logging(cli.otlp_endpoint);
 
-    let config = Config::load().unwrap_or(Config::default());
+    let config = Config::load().unwrap_or_default();
 
     match &cli.command {
         Commands::Serve(args) => serve::main(&config, args).await,
         Commands::Download(args) => download::main(args).await,
-        Commands::Scheduler(args) => tabby_scheduler::scheduler(args.now)
+        Commands::Scheduler(args) => tabby_scheduler::scheduler(args.now, &config)
             .await
             .unwrap_or_else(|err| fatal!("Scheduler failed due to '{}'", err)),
+        #[cfg(feature = "ee")]
+        Commands::JobSync => tabby_scheduler::job_sync(&config),
+        #[cfg(feature = "ee")]
+        Commands::JobIndex => tabby_scheduler::job_index(&config),
+        #[cfg(feature = "ee")]
+        Commands::WorkerCompletion(args) => {
+            worker::main(tabby_webserver::public::WorkerKind::Completion, args).await
+        }
+        #[cfg(feature = "ee")]
+        Commands::WorkerChat(args) => {
+            worker::main(tabby_webserver::public::WorkerKind::Chat, args).await
+        }
     }
 
     opentelemetry::global::shutdown_tracer_provider();

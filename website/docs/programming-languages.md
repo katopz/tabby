@@ -25,20 +25,21 @@ For an actual example of an issue or pull request adding the above support, plea
 * [Python](https://www.python.org/)
 * [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 * [TypeScript](https://www.typescriptlang.org/)
-* [Golang](https://go.dev/): Since v0.4.0
-* [Ruby](https://www.ruby-lang.org/): Since v0.4.0
+* [Golang](https://go.dev/)
+* [Ruby](https://www.ruby-lang.org/)
+* [Java](https://www.java.com/)
+* [Kotlin](https://www.kotlinlang.org/)
+* [C/C++](https://cplusplus.com/), since v0.8.0
+* [PHP](https://www.php.net/): Since v0.8.0
 
 ## Languages Missing Certain Support
 
 | Language | Stop Words (time to contribute: <5 min) | Repository Context (time to contribute: <1 hr) |
 | :------: | :-------------------------------------: | :--------------------------------------------: |
-|  C/C++   |                    🚫                    |                       🚫                        |
 |    C#    |                    🚫                    |                       🚫                        |
 |   CSS    |                    🚫                    |                       🚫                        |
 | Haskell  |                    🚫                    |                       🚫                        |
-|   Java   |                    🚫                    |                       🚫                        |
 |  Julia   |                    🚫                    |                       🚫                        |
 |   Lua    |                    🚫                    |                       🚫                        |
-|   PHP    |                    🚫                    |                       🚫                        |
 |   Perl   |                    🚫                    |                       🚫                        |
 |  Scala   |                    🚫                    |                       🚫                        |

@@ -1,4 +1,4 @@
-export { TabbyAgent, TabbyAgentOptions } from "./TabbyAgent";
+export { TabbyAgent } from "./TabbyAgent";
 export {
   Agent,
   AgentStatus,
@@ -12,6 +12,7 @@ export {
   IssuesUpdatedEvent,
   SlowCompletionResponseTimeIssue,
   HighCompletionTimeoutRateIssue,
+  ConnectionFailedIssue,
   ClientProperties,
   AgentInitOptions,
   ServerHealthState,

@@ -17,15 +17,13 @@ mod tests {
         set_tabby_root(root.to_path_buf());
 
         let config = Config {
-            repositories: vec![RepositoryConfig {
-                git_url: "https://github.com/TabbyML/interview-questions".to_owned(),
-            }],
+            repositories: vec![RepositoryConfig::new(
+                "https://github.com/TabbyML/interview-questions".to_owned(),
+            )],
             server: ServerConfig::default(),
         };
 
-        config.save();
-
-        let res = tabby_scheduler::scheduler(true).await;
+        let res = tabby_scheduler::scheduler(true, &config).await;
         res.expect("Failed to run scheduler");
     }
 }

@@ -7,7 +7,7 @@
   "repository": "https://github.com/TabbyML/tabby",
   "bugs": "https://github.com/TabbyML/tabby/issues",
   "license": "Apache-2.0",
-  "version": "1.1.0-dev",
+  "version": "1.2.0",
   "keywords": [
     "ai",
     "autocomplete",
@@ -47,6 +47,10 @@
         "title": "Tabby: Specify API Endpoint of Tabby"
       },
       {
+        "command": "tabby.setApiToken",
+        "title": "Tabby: Set API Token"
+      },
+      {
         "command": "tabby.openSettings",
         "title": "Tabby: Open Settings"
       },
@@ -57,6 +61,14 @@
       {
         "command": "tabby.gettingStarted",
         "title": "Tabby: Getting Started"
+      },
+      {
+        "command": "tabby.openOnlineHelp",
+        "title": "Tabby: Online Help"
+      },
+      {
+        "command": "tabby.notifications.resetMuted",
+        "title": "Tabby: Reset notifications marked as \"Don't Show Again\""
       }
     ],
     "menus": {
@@ -147,7 +159,7 @@
         "tabby.usage.anonymousUsageTracking": {
           "type": "boolean",
           "default": false,
-          "description": "Disable anonymous usage tracking."
+          "markdownDescription": "**Disable anonymous usage tracking**  \nTabby collects aggregated anonymous usage data and sends it to the Tabby team to help improve our products.  \nYour code, generated completions, or any identifying information is never tracked or transmitted.  \nFor more details on data collection, please check our [online documentation](https://tabby.tabbyml.com/docs/extensions/configurations#usage-collection)."
         }
       }
     },
@@ -186,37 +198,37 @@
   },
   "scripts": {
     "prebuild": "cd ../tabby-agent && yarn build",
-    "build": "tsup --minify --treeshake smallest",
-    "watch": "tsup --sourcemap --watch ./ --ignore-watch ./dist --watch ../tabby-agent/dist",
+    "build": "tsc --noEmit && tsup --minify --treeshake smallest",
+    "watch": "tsup --sourcemap --watch ./ --ignore-watch ./dist --ignore-watch ./.vscode-test-web --watch ../tabby-agent/dist",
     "dev": "code --extensionDevelopmentPath=$PWD --disable-extensions && yarn watch",
     "dev:browser": "vscode-test-web --extensionDevelopmentPath=$PWD --browserType=chromium --port=3000 && yarn watch",
-    "lint": "prettier --write .",
-    "lint:check": "prettier --check .",
+    "lint": "eslint --fix --ext .ts ./src && prettier --write .",
+    "lint:check": "eslint --ext .ts ./src && prettier --check .",
     "vscode:prepackage": "yarn build",
     "vscode:package": "vsce package --no-dependencies",
     "vscode:prepublish": "yarn build",
     "vscode:publish": "vsce publish --no-dependencies"
   },
   "devDependencies": {
-    "@types/glob": "^7.2.0",
     "@types/mocha": "^10.0.1",
     "@types/node": "18.x",
     "@types/vscode": "^1.82.0",
-    "@typescript-eslint/eslint-plugin": "^5.31.0",
-    "@typescript-eslint/parser": "^5.31.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.1",
+    "@typescript-eslint/parser": "^6.13.1",
     "@vscode/test-electron": "^2.1.5",
     "@vscode/test-web": "^0.0.44",
     "@vscode/vsce": "^2.15.0",
     "assert": "^2.0.0",
+    "esbuild-plugin-copy": "^2.1.1",
     "esbuild-plugin-polyfill-node": "^0.3.0",
-    "eslint": "^8.20.0",
-    "glob": "^8.0.3",
+    "eslint": "^8.55.0",
+    "eslint-config-prettier": "^9.0.0",
     "prettier": "^3.0.0",
     "tsup": "^7.1.0",
-    "typescript": "^4.7.4"
+    "typescript": "^5.3.2"
   },
   "dependencies": {
     "@xstate/fsm": "^2.0.1",
-    "tabby-agent": "1.1.0-dev"
+    "tabby-agent": "1.3.0"
   }
 }

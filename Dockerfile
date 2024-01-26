@@ -8,6 +8,9 @@ ARG BASE_CUDA_RUN_CONTAINER=nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_V
 
 FROM ${BASE_CUDA_DEV_CONTAINER} as build
 
+# Rust toolchain version
+ARG RUST_TOOLCHAIN=stable
+
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -22,15 +25,16 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # setup rust.
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+RUN curl https://sh.rustup.rs -sSf | bash -s -- --default-toolchain ${RUST_TOOLCHAIN} -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /root/workspace
-COPY . .
 
 RUN mkdir -p /opt/tabby/bin
 RUN mkdir -p /opt/tabby/lib
 RUN mkdir -p target
+
+COPY . .
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/root/workspace/target \
@@ -42,6 +46,8 @@ FROM ${BASE_CUDA_RUN_CONTAINER} as runtime
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         git \
+        openssh-client \
+        ca-certificates \
         && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -50,13 +56,21 @@ RUN apt-get update && \
 # Context: https://github.com/git/git/commit/8959555cee7ec045958f9b6dd62e541affb7e7d9
 RUN git config --system --add safe.directory "*"
 
+# Automatic platform ARGs in the global scope
+# https://docs.docker.com/engine/reference/builder/#automatic-platform-args-in-the-global-scope
+ARG TARGETARCH
+
+# AMD64 only:
 # Make link to libnvidia-ml.so (NVML) library
 # so that we could get GPU stats.
-RUN ln -s /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
-        /usr/lib/x86_64-linux-gnu/libnvidia-ml.so
+RUN if [ "$TARGETARCH" = "amd64" ]; then  \
+    ln -s /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
+        /usr/lib/x86_64-linux-gnu/libnvidia-ml.so; \
+    fi
 
 COPY --from=build /opt/tabby /opt/tabby
 
+ENV PATH="$PATH:/opt/tabby/bin"
 ENV TABBY_ROOT=/data
 
 ENTRYPOINT ["/opt/tabby/bin/tabby"]

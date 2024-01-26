@@ -1,4 +1,9 @@
-import { commands, window, workspace, env, ConfigurationTarget, Uri } from "vscode";
+import { commands, window, workspace, ConfigurationTarget } from "vscode";
+import type {
+  HighCompletionTimeoutRateIssue,
+  SlowCompletionResponseTimeIssue,
+  ConnectionFailedIssue,
+} from "tabby-agent";
 import { agent } from "./agent";
 
 function showInformationWhenInitializing() {
@@ -73,9 +78,8 @@ function showInformationWhenInlineSuggestDisabled() {
     .then((selection) => {
       switch (selection) {
         case "Enable":
-          const configuration = workspace.getConfiguration("editor");
           console.debug(`Set editor.inlineSuggest.enabled: true.`);
-          configuration.update("inlineSuggest.enabled", true, ConfigurationTarget.Global, false);
+          workspace.getConfiguration("editor").update("inlineSuggest.enabled", true, ConfigurationTarget.Global, false);
           break;
         case "Settings":
           commands.executeCommand("workbench.action.openSettings", "@id:editor.inlineSuggest.enabled");
@@ -84,18 +88,61 @@ function showInformationWhenInlineSuggestDisabled() {
     });
 }
 
-function showInformationWhenDisconnected() {
-  window
-    .showInformationMessage("Cannot connect to Tabby Server. Please check settings.", "Settings")
-    .then((selection) => {
+function showInformationWhenDisconnected(modal: boolean = false) {
+  if (modal) {
+    const message = agent().getIssueDetail<ConnectionFailedIssue>({ name: "connectionFailed" })?.message;
+    window
+      .showWarningMessage(
+        `Cannot connect to Tabby Server.`,
+        {
+          modal: true,
+          detail: message,
+        },
+        "Settings",
+        "Online Help...",
+      )
+      .then((selection) => {
+        switch (selection) {
+          case "Online Help...":
+            commands.executeCommand("tabby.openOnlineHelp");
+            break;
+          case "Settings":
+            commands.executeCommand("tabby.openSettings");
+            break;
+        }
+      });
+  } else {
+    window.showWarningMessage(`Cannot connect to Tabby Server.`, "Detail", "Settings").then((selection) => {
       switch (selection) {
+        case "Detail":
+          showInformationWhenDisconnected(true);
+          break;
         case "Settings":
           commands.executeCommand("tabby.openSettings");
           break;
       }
     });
+  }
 }
 
+function showInformationWhenUnauthorized() {
+  let message = "Tabby server requires authentication, ";
+  const currentToken = agent().getConfig()["server"]["token"].trim();
+  if (currentToken.length > 0) {
+    message += ` but the current token is invalid.`;
+  } else {
+    message += ` please set your personal token.`;
+  }
+  window.showWarningMessage(message, "Set Credentials").then((selection) => {
+    switch (selection) {
+      case "Set Credentials":
+        commands.executeCommand("tabby.setApiToken");
+        break;
+    }
+  });
+}
+
+/** @deprecated Tabby Cloud auth */
 function showInformationStartAuth(callbacks?: { onAuthStart?: () => void; onAuthEnd?: () => void }) {
   window
     .showWarningMessage(
@@ -114,14 +161,17 @@ function showInformationStartAuth(callbacks?: { onAuthStart?: () => void; onAuth
     });
 }
 
+/** @deprecated Tabby Cloud auth */
 function showInformationAuthSuccess() {
   window.showInformationMessage("Congrats, you're authorized, start to use Tabby now.");
 }
 
+/** @deprecated Tabby Cloud auth */
 function showInformationWhenStartAuthButAlreadyAuthorized() {
   window.showInformationMessage("You are already authorized now.");
 }
 
+/** @deprecated Tabby Cloud auth */
 function showInformationWhenAuthFailed() {
   window.showWarningMessage("Cannot connect to server. Please check settings.", "Settings").then((selection) => {
     switch (selection) {
@@ -135,11 +185,11 @@ function showInformationWhenAuthFailed() {
 function getHelpMessageForCompletionResponseTimeIssue() {
   let helpMessageForRunningLargeModelOnCPU = "";
   const serverHealthState = agent().getServerHealthState();
-  if (serverHealthState?.device === "cpu" && serverHealthState?.model?.match(/[0-9\.]+B$/)) {
+  if (serverHealthState?.device === "cpu" && serverHealthState?.model?.match(/[0-9.]+B$/)) {
     helpMessageForRunningLargeModelOnCPU +=
       `Your Tabby server is running model ${serverHealthState?.model} on CPU. ` +
       "This model may be performing poorly due to its large parameter size, please consider trying smaller models or switch to GPU. " +
-      "You can find a list of supported models in the model directory.\n";
+      "You can find a list of recommend models in the online documentation.\n";
   }
   let commonHelpMessage = "";
   const host = new URL(agent().getConfig().server.endpoint).host;
@@ -148,7 +198,7 @@ function getHelpMessageForCompletionResponseTimeIssue() {
       serverHealthState?.model ?? ""
     } may be performing poorly due to its large parameter size. `;
     commonHelpMessage +=
-      "Please consider trying smaller models. You can find a list of supported models in the model directory.\n";
+      "Please consider trying smaller models. You can find a list of recommend models in the online documentation.\n";
   }
   if (!(host.startsWith("localhost") || host.startsWith("127.0.0.1"))) {
     commonHelpMessage += " - A poor network connection. Please check your network and proxy settings.\n";
@@ -171,7 +221,8 @@ function getHelpMessageForCompletionResponseTimeIssue() {
 
 function showInformationWhenSlowCompletionResponseTime(modal: boolean = false) {
   if (modal) {
-    const stats = agent().getIssueDetail({ name: "slowCompletionResponseTime" })?.completionResponseStats;
+    const stats = agent().getIssueDetail<SlowCompletionResponseTimeIssue>({ name: "slowCompletionResponseTime" })
+      ?.completionResponseStats;
     let statsMessage = "";
     if (stats && stats["responses"] && stats["averageResponseTime"]) {
       statsMessage = `The average response time of recent ${stats["responses"]} completion requests is ${Number(
@@ -185,18 +236,22 @@ function showInformationWhenSlowCompletionResponseTime(modal: boolean = false) {
           modal: true,
           detail: statsMessage + getHelpMessageForCompletionResponseTimeIssue(),
         },
-        "Model Directory",
+        "Online Help...",
+        "Don't Show Again",
       )
       .then((selection) => {
         switch (selection) {
-          case "Model Directory":
-            env.openExternal(Uri.parse("https://tabby.tabbyml.com/docs/models/"));
+          case "Online Help...":
+            commands.executeCommand("tabby.openOnlineHelp");
+            break;
+          case "Don't Show Again":
+            commands.executeCommand("tabby.notifications.mute", "completionResponseTimeIssues");
             break;
         }
       });
   } else {
     window
-      .showWarningMessage("Completion requests appear to take too much time.", "Detail", "Settings")
+      .showWarningMessage("Completion requests appear to take too much time.", "Detail", "Settings", "Don't Show Again")
       .then((selection) => {
         switch (selection) {
           case "Detail":
@@ -205,6 +260,9 @@ function showInformationWhenSlowCompletionResponseTime(modal: boolean = false) {
           case "Settings":
             commands.executeCommand("tabby.openSettings");
             break;
+          case "Don't Show Again":
+            commands.executeCommand("tabby.notifications.mute", "completionResponseTimeIssues");
+            break;
         }
       });
   }
@@ -212,7 +270,8 @@ function showInformationWhenSlowCompletionResponseTime(modal: boolean = false) {
 
 function showInformationWhenHighCompletionTimeoutRate(modal: boolean = false) {
   if (modal) {
-    const stats = agent().getIssueDetail({ name: "highCompletionTimeoutRate" })?.completionResponseStats;
+    const stats = agent().getIssueDetail<HighCompletionTimeoutRateIssue>({ name: "highCompletionTimeoutRate" })
+      ?.completionResponseStats;
     let statsMessage = "";
     if (stats && stats["total"] && stats["timeouts"]) {
       statsMessage = `${stats["timeouts"]} of ${stats["total"]} completion requests timed out.\n\n`;
@@ -224,26 +283,35 @@ function showInformationWhenHighCompletionTimeoutRate(modal: boolean = false) {
           modal: true,
           detail: statsMessage + getHelpMessageForCompletionResponseTimeIssue(),
         },
-        "Model Directory",
+        "Online Help...",
+        "Don't Show Again",
       )
       .then((selection) => {
         switch (selection) {
-          case "Model Directory":
-            env.openExternal(Uri.parse("https://tabby.tabbyml.com/docs/models/"));
+          case "Online Help...":
+            commands.executeCommand("tabby.openOnlineHelp");
+            break;
+          case "Don't Show Again":
+            commands.executeCommand("tabby.notifications.mute", "completionResponseTimeIssues");
             break;
         }
       });
   } else {
-    window.showWarningMessage("Most completion requests timed out.", "Detail", "Settings").then((selection) => {
-      switch (selection) {
-        case "Detail":
-          showInformationWhenHighCompletionTimeoutRate(true);
-          break;
-        case "Settings":
-          commands.executeCommand("tabby.openSettings");
-          break;
-      }
-    });
+    window
+      .showWarningMessage("Most completion requests timed out.", "Detail", "Settings", "Don't Show Again")
+      .then((selection) => {
+        switch (selection) {
+          case "Detail":
+            showInformationWhenHighCompletionTimeoutRate(true);
+            break;
+          case "Settings":
+            commands.executeCommand("tabby.openSettings");
+            break;
+          case "Don't Show Again":
+            commands.executeCommand("tabby.notifications.mute", "completionResponseTimeIssues");
+            break;
+        }
+      });
   }
 }
 
@@ -254,6 +322,7 @@ export const notifications = {
   showInformationWhenManualTriggerLoading,
   showInformationWhenInlineSuggestDisabled,
   showInformationWhenDisconnected,
+  showInformationWhenUnauthorized,
   showInformationStartAuth,
   showInformationAuthSuccess,
   showInformationWhenStartAuthButAlreadyAuthorized,
